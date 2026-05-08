@@ -1,0 +1,56 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Optional npm cache directory
+.npm
+
+# Optional yarn cache directory
+.yarn/cache/
+
+# Next.js
+.next/
+out/
+
+# Vite
+*.local
+
+# Local directories
+.github
