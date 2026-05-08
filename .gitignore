@@ -52,5 +52,15 @@ out/
 # Vite
 *.local
 
-# Local directories
-.github
+# Vercel
+.vercel/
+
+# Turbo
+.turbo/
+
+# pnpm store
+.pnpm-store/
+
+# Prisma local artifacts
+prisma/*.db
+prisma/*.db-journal
