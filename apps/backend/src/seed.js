@@ -1,0 +1,50 @@
+import { prisma } from "./db/prisma.js";
+import { config } from "./config/env.js";
+import { hashPassword } from "./utils/auth.js";
+
+async function main() {
+  if (!config.adminEmail || !config.adminPassword) {
+    console.warn("ADMIN_EMAIL and ADMIN_PASSWORD are required for seeding.");
+    return;
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { email: config.adminEmail }
+  });
+
+  let user = existing;
+  if (!existing) {
+    user = await prisma.user.create({
+      data: {
+        email: config.adminEmail,
+        name: "Admin",
+        role: "ADMIN",
+        passwordHash: await hashPassword(config.adminPassword)
+      }
+    });
+  }
+
+  const weekdays = [1, 2, 3, 4, 5];
+  const rules = weekdays.map((dayOfWeek) => ({
+    userId: user.id,
+    dayOfWeek,
+    startTime: config.defaultWorkStart,
+    endTime: config.defaultWorkEnd,
+    slotMinutes: config.defaultSlotMinutes,
+    isActive: true
+  }));
+
+  await prisma.availabilityRule.deleteMany({ where: { userId: user.id } });
+  await prisma.availabilityRule.createMany({ data: rules });
+
+  console.log("Seed completed.");
+}
+
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
