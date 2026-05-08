@@ -37,6 +37,17 @@ async function main() {
   await prisma.availabilityRule.deleteMany({ where: { userId: user.id } });
   await prisma.availabilityRule.createMany({ data: rules });
 
+  const spaceCount = await prisma.space.count();
+  if (spaceCount === 0) {
+    await prisma.space.create({
+      data: {
+        name: "Sala Principal",
+        capacity: 1,
+        description: "Sala padrao"
+      }
+    });
+  }
+
   console.log("Seed completed.");
 }
 

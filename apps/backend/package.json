@@ -1,5 +1,5 @@
 {
-  "name": "consilium-backend",
+  "name": "consolium-backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "prisma:migrate": "npx prisma migrate dev --name init --schema ../../prisma/schema.prisma",
+    "prisma:migrate:phase2": "npx prisma migrate dev --name phase2 --schema ../../prisma/schema.prisma",
     "prisma:generate": "npx prisma generate --schema ../../prisma/schema.prisma",
     "seed": "node src/seed.js"
   },
@@ -15,7 +16,9 @@
     "@prisma/adapter-pg": "^7.8.0",
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1",
+    "resend": "^4.0.0"
   },
   "devDependencies": {
     "prisma": "^7.8.0"

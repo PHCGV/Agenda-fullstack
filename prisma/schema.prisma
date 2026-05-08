@@ -1,5 +1,5 @@
 datasource db {
-	provider = "postgresql"
+  provider = "postgresql"
 }
 
 generator client {
@@ -7,88 +7,154 @@ generator client {
 }
 
 enum UserRole {
-	ADMIN
-	PROFESSIONAL
+  ADMIN
+  PROFESSIONAL
 }
 
 enum AppointmentStatus {
-	SCHEDULED
-	CONFIRMED
-	CANCELED
-	COMPLETED
-	PENDING
+  SCHEDULED
+  CONFIRMED
+  CANCELED
+  COMPLETED
+  PENDING
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELED
+}
+
+enum NotificationType {
+  REMINDER
+}
+
+enum NotificationChannel {
+  EMAIL
 }
 
 model User {
-	id             String             @id @default(cuid())
-	email          String             @unique
-	name           String
-	passwordHash   String
-	role           UserRole           @default(PROFESSIONAL)
-	appointments   Appointment[]
-	availability   AvailabilityRule[]
-	refreshTokens  RefreshToken[]
-	createdAt      DateTime           @default(now())
-	updatedAt      DateTime           @updatedAt
+  id             String             @id @default(cuid())
+  email          String             @unique
+  name           String
+  passwordHash   String
+  role           UserRole           @default(PROFESSIONAL)
+  appointments   Appointment[]
+  availability   AvailabilityRule[]
+  refreshTokens  RefreshToken[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  blockedPeriods BlockedPeriod[]
 }
 
 model Client {
-	id          String        @id @default(cuid())
-	name        String
-	email       String        @unique
-	phone       String?
-	appointments Appointment[]
-	createdAt   DateTime      @default(now())
-	updatedAt   DateTime      @updatedAt
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  phone        String?
+  appointments Appointment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Appointment {
-	id                 String             @id @default(cuid())
-	status             AppointmentStatus  @default(SCHEDULED)
-	startAt            DateTime
-	endAt              DateTime
-	notes              String?
-	cancellationReason String?
-	confirmedAt        DateTime?
-	canceledAt         DateTime?
-	completedAt        DateTime?
-	createdAt          DateTime           @default(now())
-	updatedAt          DateTime           @updatedAt
+  id                 String            @id @default(cuid())
+  status             AppointmentStatus @default(SCHEDULED)
+  startAt            DateTime
+  endAt              DateTime
+  notes              String?
+  cancellationReason String?
+  confirmedAt        DateTime?
+  canceledAt         DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
-	client             Client             @relation(fields: [clientId], references: [id])
-	clientId           String
-	professional       User               @relation(fields: [professionalId], references: [id])
-	professionalId     String
+  client         Client         @relation(fields: [clientId], references: [id])
+  clientId       String
+  professional   User           @relation(fields: [professionalId], references: [id])
+  professionalId String
+  space          Space?         @relation(fields: [spaceId], references: [id])
+  spaceId        String?
+  notifications  Notification[]
 
-	@@index([professionalId, startAt, endAt])
-	@@index([clientId, startAt])
+  @@index([professionalId, startAt, endAt])
+  @@index([clientId, startAt])
+}
+
+model Space {
+  id           String        @id @default(cuid())
+  name         String
+  capacity     Int?
+  description  String?
+  isActive     Boolean       @default(true)
+  appointments Appointment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model AvailabilityRule {
-	id          String   @id @default(cuid())
-	user        User?    @relation(fields: [userId], references: [id])
-	userId      String?
-	dayOfWeek   Int
-	startTime   String
-	endTime     String
-	slotMinutes Int      @default(60)
-	isActive    Boolean  @default(true)
-	createdAt   DateTime @default(now())
-	updatedAt   DateTime @updatedAt
+  id          String   @id @default(cuid())
+  user        User?    @relation(fields: [userId], references: [id])
+  userId      String?
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  slotMinutes Int      @default(60)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-	@@index([userId, dayOfWeek])
+  @@index([userId, dayOfWeek])
+}
+
+model BlockedPeriod {
+  id          String    @id @default(cuid())
+  isRecurring Boolean   @default(false)
+  startAt     DateTime?
+  endAt       DateTime?
+  dayOfWeek   Int?
+  startTime   String?
+  endTime     String?
+  reason      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  userId      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, isRecurring])
+  @@index([startAt, endAt])
+  @@index([dayOfWeek])
+}
+
+model Notification {
+  id            String              @id @default(cuid())
+  type          NotificationType    @default(REMINDER)
+  channel       NotificationChannel @default(EMAIL)
+  status        NotificationStatus  @default(PENDING)
+  sendAt        DateTime
+  sentAt        DateTime?
+  error         String?
+  token         String              @unique
+  appointment   Appointment         @relation(fields: [appointmentId], references: [id])
+  appointmentId String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([status, sendAt])
 }
 
 model RefreshToken {
-	id        String   @id @default(cuid())
-	tokenHash String
-	expiresAt DateTime
-	revokedAt DateTime?
-	createdAt DateTime @default(now())
+  id        String    @id @default(cuid())
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
 
-	user       User     @relation(fields: [userId], references: [id])
-	userId     String
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
 
-	@@index([userId])
-	@@index([expiresAt])
+  @@index([userId])
+  @@index([expiresAt])
 }

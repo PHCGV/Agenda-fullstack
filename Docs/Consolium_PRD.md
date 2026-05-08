@@ -1,4 +1,4 @@
-**CONSILIUM**
+**CONSOLIUM**
 
 Sistema Web de Agendamento e Gestão de Atendimentos
 
@@ -14,7 +14,7 @@ Sistema Web de Agendamento e Gestão de Atendimentos
 
 # **1\. Visão Geral do Produto**
 
-O Consilium é um sistema web de agendamento e gestão de atendimentos desenvolvido para organizações e profissionais que necessitam organizar horários, espaços e compromissos de forma prática, visual e eficiente.
+O Consolium é um sistema web de agendamento e gestão de atendimentos desenvolvido para organizações e profissionais que necessitam organizar horários, espaços e compromissos de forma prática, visual e eficiente.
 
 A solução elimina a necessidade de contato manual (telefone ou mensagem) para marcação de consultas, reuniões ou atendimentos, centralizando toda a gestão em uma interface responsiva e acessível por computador, tablet e celular.
 
@@ -67,7 +67,7 @@ A solução elimina a necessidade de contato manual (telefone ou mensagem) para 
 
 ## **2.1 Agendamento Online**
 
-O cliente poderá acessar a interface pública do Consilium, visualizar os horários disponíveis e realizar a marcação de um atendimento sem necessidade de contato manual.
+O cliente poderá acessar a interface pública do Consolium, visualizar os horários disponíveis e realizar a marcação de um atendimento sem necessidade de contato manual.
 
 ### **Requisitos Funcionais**
 
@@ -124,12 +124,12 @@ O sistema permitirá cadastrar e gerenciar os espaços físicos onde os atendime
 
 ## **2.6 Integração com Google Agenda**
 
-O Consilium se integrará ao Google Calendar para sincronizar compromissos bidirecionalmente, permitindo que o usuário visualize todos os eventos em um único lugar.
+O Consolium se integrará ao Google Calendar para sincronizar compromissos bidirecionalmente, permitindo que o usuário visualize todos os eventos em um único lugar.
 
 ### **Requisitos Funcionais**
 
 - Autenticação OAuth 2.0 com conta Google
-- Exportação de agendamentos do Consilium para o Google Calendar
+- Exportação de agendamentos do Consolium para o Google Calendar
 - Importação de eventos do Google Calendar para evitar conflitos
 - Atualização automática ao alterar ou cancelar agendamentos
 
@@ -171,7 +171,7 @@ O Neon é uma alternativa serverless ao PostgreSQL tradicional, com as seguintes
 
 # **4\. Requisitos de Segurança**
 
-A segurança é um pilar fundamental do Consilium, especialmente por lidar com dados sensíveis de clientes. As práticas abaixo devem ser adotadas desde o início do desenvolvimento.
+A segurança é um pilar fundamental do Consolium, especialmente por lidar com dados sensíveis de clientes. As práticas abaixo devem ser adotadas desde o início do desenvolvimento.
 
 ## **4.1 Validação de Dados**
 
@@ -253,7 +253,7 @@ O sistema deverá funcionar corretamente em computador, tablet e celular. A inte
 
 ## **6.1 Estrutura de Pastas Sugerida**
 
-consilium/  
+consolium/  
 ├── apps/  
 │ ├── frontend/ # React + Tailwind  
 │ └── backend/ # Node.js + Express  
@@ -310,4 +310,4 @@ consilium/
     - **LGPD:** Lei Geral de Proteção de Dados - legislação brasileira de privacidade
     - **MVP:** Minimum Viable Product - versão mínima viável do produto
 
-Consilium © 2025 - Documento confidencial de uso interno
+Consolium © 2025 - Documento confidencial de uso interno

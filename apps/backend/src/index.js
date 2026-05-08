@@ -1,9 +1,9 @@
 import express from "express";
 import { config } from "./config/env.js";
-import { errorHandler, notFound } from "./middleware/errorHandler.js";
 import authRoutes from "./routes/auth.js";
 import publicRoutes from "./routes/public.js";
 import adminRoutes from "./routes/admin.js";
+import cronRoutes from "./routes/cron.js";
 
 const app = express();
 
@@ -27,10 +27,9 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/cron", cronRoutes);
 
-app.use(notFound);
-app.use(errorHandler);
 
 app.listen(config.port, () => {
-  console.log(`Consilium API running on port ${config.port}`);
+  console.log(`Consolium API running on port ${config.port}`);
 });

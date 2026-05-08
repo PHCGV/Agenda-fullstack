@@ -79,3 +79,85 @@ export function updateAppointmentStatus(id, status, reason, accessToken) {
     body: JSON.stringify({ status, reason })
   });
 }
+
+export function updateAppointmentSpace(id, spaceId, accessToken) {
+  return request(`/api/admin/appointments/${id}/space`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({ spaceId })
+  });
+}
+
+export function getSpaces(accessToken) {
+  return request("/api/admin/spaces", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function createSpace(payload, accessToken) {
+  return request("/api/admin/spaces", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateSpace(id, payload, accessToken) {
+  return request(`/api/admin/spaces/${id}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteSpace(id, accessToken) {
+  return request(`/api/admin/spaces/${id}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function getBlockedPeriods(accessToken) {
+  return request("/api/admin/blocked-periods", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function createBlockedPeriod(payload, accessToken) {
+  return request("/api/admin/blocked-periods", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteBlockedPeriod(id, accessToken) {
+  return request(`/api/admin/blocked-periods/${id}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function getNotifications(accessToken) {
+  return request("/api/admin/notifications", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
