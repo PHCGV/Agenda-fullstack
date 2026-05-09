@@ -5,16 +5,20 @@ import {
   createSpace,
   deleteBlockedPeriod,
   deleteSpace,
+  exportAppointmentsToGoogle,
   getAppointments,
   getAvailability,
+  getAvailabilityRules,
   getBlockedPeriods,
+  getGoogleCalendarStatus,
   getNotifications,
   getProfessionals,
   getSpaces,
   login,
   logout,
   updateAppointmentSpace,
-  updateAppointmentStatus
+  updateAppointmentStatus,
+  updateAvailabilityRules
 } from "./api.js";
 
 const statusLabels = {
@@ -35,6 +39,17 @@ const statusClass = {
 
 const storageKey = "consolium-auth";
 const legacyStorageKey = "consilium-auth";
+const dayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
+const fullDayLabels = [
+  "Domingo",
+  "Segunda",
+  "Terca",
+  "Quarta",
+  "Quinta",
+  "Sexta",
+  "Sabado"
+];
+const calendarHours = Array.from({ length: 11 }, (_, index) => index + 8);
 
 function BrandLogo({ compact = false }) {
   return (
@@ -67,6 +82,28 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function toDateInput(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function startOfWeek(date) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+}
+
+function getHourPosition(iso) {
+  const date = new Date(iso);
+  return date.getHours() + date.getMinutes() / 60;
+}
+
 export default function App() {
   const [view, setView] = useState("login");
   const [professionals, setProfessionals] = useState([]);
@@ -97,7 +134,9 @@ export default function App() {
   const [appointments, setAppointments] = useState([]);
   const [adminMessage, setAdminMessage] = useState("");
   const [loadingAppointments, setLoadingAppointments] = useState(false);
-  const [adminTab, setAdminTab] = useState("appointments");
+  const [adminTab, setAdminTab] = useState("calendar");
+  const [calendarMode, setCalendarMode] = useState("week");
+  const [calendarDate, setCalendarDate] = useState(today());
   const [spaces, setSpaces] = useState([]);
   const [spaceForm, setSpaceForm] = useState({
     name: "",
@@ -115,9 +154,22 @@ export default function App() {
     reason: ""
   });
   const [notifications, setNotifications] = useState([]);
+  const [availabilityRules, setAvailabilityRules] = useState([]);
+  const [availabilityForm, setAvailabilityForm] = useState(() =>
+    fullDayLabels.map((_, dayOfWeek) => ({
+      dayOfWeek,
+      isActive: dayOfWeek >= 1 && dayOfWeek <= 5,
+      startTime: "09:00",
+      endTime: "17:00",
+      slotMinutes: 60
+    }))
+  );
+  const [googleStatus, setGoogleStatus] = useState(null);
   const [loadingSpaces, setLoadingSpaces] = useState(false);
   const [loadingBlocked, setLoadingBlocked] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
 
   useEffect(() => {
     getProfessionals()
@@ -204,13 +256,21 @@ export default function App() {
     setView("login");
   }
 
+  const calendarRange = useMemo(() => {
+    const selected = new Date(`${calendarDate}T00:00:00`);
+    const start = calendarMode === "day" ? selected : startOfWeek(selected);
+    const days = calendarMode === "day" ? 1 : 7;
+    const end = addDays(start, days);
+    return { start, end, days };
+  }, [calendarDate, calendarMode]);
+
   async function loadAppointments() {
     if (!auth?.accessToken) return;
     setLoadingAppointments(true);
     setAdminMessage("");
     try {
-      const from = new Date().toISOString();
-      const to = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const from = calendarRange.start.toISOString();
+      const to = calendarRange.end.toISOString();
       const data = await getAppointments(from, to, auth.accessToken);
       setAppointments(data);
     } catch (error) {
@@ -256,6 +316,79 @@ export default function App() {
       setAdminMessage(error.message);
     } finally {
       setLoadingNotifications(false);
+    }
+  }
+
+  async function loadAvailabilityRules() {
+    if (!auth?.accessToken) return;
+    setLoadingAvailability(true);
+    try {
+      const rules = await getAvailabilityRules(auth.accessToken);
+      setAvailabilityRules(rules);
+      setAvailabilityForm((prev) =>
+        prev.map((day) => {
+          const rule = rules.find((item) => item.dayOfWeek === day.dayOfWeek);
+          return rule
+            ? {
+                dayOfWeek: rule.dayOfWeek,
+                isActive: rule.isActive,
+                startTime: rule.startTime,
+                endTime: rule.endTime,
+                slotMinutes: rule.slotMinutes
+              }
+            : day;
+        })
+      );
+    } catch (error) {
+      setAdminMessage(error.message);
+    } finally {
+      setLoadingAvailability(false);
+    }
+  }
+
+  async function handleAvailabilitySave(event) {
+    event.preventDefault();
+    if (!auth?.accessToken) return;
+
+    try {
+      const rules = availabilityForm
+        .filter((rule) => rule.isActive)
+        .map((rule) => ({
+          dayOfWeek: rule.dayOfWeek,
+          startTime: rule.startTime,
+          endTime: rule.endTime,
+          slotMinutes: Number(rule.slotMinutes),
+          isActive: true
+        }));
+
+      await updateAvailabilityRules(rules, auth.accessToken);
+      setAdminMessage("Configuracao de agenda atualizada.");
+      await loadAvailabilityRules();
+    } catch (error) {
+      setAdminMessage(error.message);
+    }
+  }
+
+  async function loadGoogleStatus() {
+    if (!auth?.accessToken) return;
+    setLoadingGoogle(true);
+    try {
+      const status = await getGoogleCalendarStatus(auth.accessToken);
+      setGoogleStatus(status);
+    } catch (error) {
+      setAdminMessage(error.message);
+    } finally {
+      setLoadingGoogle(false);
+    }
+  }
+
+  async function handleGoogleExport() {
+    if (!auth?.accessToken) return;
+    try {
+      await exportAppointmentsToGoogle(auth.accessToken);
+      setAdminMessage("Exportacao enviada ao Google Agenda.");
+    } catch (error) {
+      setAdminMessage(error.message);
     }
   }
 
@@ -370,13 +503,15 @@ export default function App() {
       loadAppointments();
       loadSpaces();
     }
-  }, [auth, view]);
+  }, [auth, view, calendarRange.start, calendarRange.end]);
 
   useEffect(() => {
     if (!auth?.accessToken || view !== "admin") return;
     if (adminTab === "spaces") loadSpaces();
     if (adminTab === "blocked") loadBlockedPeriods();
     if (adminTab === "notifications") loadNotifications();
+    if (adminTab === "settings") loadAvailabilityRules();
+    if (adminTab === "google") loadGoogleStatus();
   }, [adminTab, auth, view]);
 
   const slotItems = useMemo(() => {
@@ -385,6 +520,19 @@ export default function App() {
       label: formatTime(slot.startAt)
     }));
   }, [slots]);
+
+  const calendarDays = useMemo(() => {
+    return Array.from({ length: calendarRange.days }, (_, index) =>
+      addDays(calendarRange.start, index)
+    );
+  }, [calendarRange]);
+
+  const visibleAppointments = useMemo(() => {
+    return appointments.filter((appointment) => {
+      const start = new Date(appointment.startAt);
+      return start >= calendarRange.start && start < calendarRange.end;
+    });
+  }, [appointments, calendarRange]);
 
   const activeSpaces = spaces.filter((space) => space.isActive).length;
   const pendingNotifications = notifications.filter(
@@ -551,10 +699,10 @@ export default function App() {
         <div className="nav-right">
           <button
             type="button"
-            className={view === "admin" && adminTab === "appointments" ? "active" : ""}
+            className={view === "admin" && adminTab === "calendar" ? "active" : ""}
             onClick={() => {
               setView(auth ? "admin" : "login");
-              setAdminTab("appointments");
+              setAdminTab("calendar");
             }}
           >
             Administrativo
@@ -709,10 +857,17 @@ export default function App() {
             <div className="admin-tabs">
               <button
                 type="button"
+                className={adminTab === "calendar" ? "active" : ""}
+                onClick={() => setAdminTab("calendar")}
+              >
+                Calendario
+              </button>
+              <button
+                type="button"
                 className={adminTab === "appointments" ? "active" : ""}
                 onClick={() => setAdminTab("appointments")}
               >
-                Agenda
+                Lista
               </button>
               <button
                 type="button"
@@ -735,11 +890,25 @@ export default function App() {
               >
                 Notificacoes
               </button>
+              <button
+                type="button"
+                className={adminTab === "settings" ? "active" : ""}
+                onClick={() => setAdminTab("settings")}
+              >
+                Configuracoes
+              </button>
+              <button
+                type="button"
+                className={adminTab === "google" ? "active" : ""}
+                onClick={() => setAdminTab("google")}
+              >
+                Google Agenda
+              </button>
             </div>
 
             <div className="summary-strip">
               <div>
-                <strong>{appointments.length}</strong>
+                <strong>{visibleAppointments.length}</strong>
                 <span>Atendimentos</span>
               </div>
               <div>
@@ -751,6 +920,104 @@ export default function App() {
                 <span>Notificacoes pendentes</span>
               </div>
             </div>
+
+                {adminTab === "calendar" && (
+                  <section className="calendar-shell">
+                    <div className="calendar-toolbar">
+                      <div>
+                        <strong>
+                          {calendarRange.start.toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "short"
+                          })}{" "}
+                          -{" "}
+                          {addDays(calendarRange.end, -1).toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric"
+                          })}
+                        </strong>
+                        <span>{visibleAppointments.length} compromissos no periodo</span>
+                      </div>
+                      <div className="calendar-actions">
+                        <button
+                          type="button"
+                          className={calendarMode === "day" ? "active" : ""}
+                          onClick={() => setCalendarMode("day")}
+                        >
+                          Dia
+                        </button>
+                        <button
+                          type="button"
+                          className={calendarMode === "week" ? "active" : ""}
+                          onClick={() => setCalendarMode("week")}
+                        >
+                          Semana
+                        </button>
+                        <input
+                          type="date"
+                          value={calendarDate}
+                          onChange={(event) => setCalendarDate(event.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div
+                      className={`calendar-grid ${
+                        calendarMode === "day" ? "calendar-grid--day" : ""
+                      }`}
+                    >
+                      <div className="calendar-time-column">
+                        <span />
+                        {calendarHours.map((hour) => (
+                          <span key={hour}>{String(hour).padStart(2, "0")}:00</span>
+                        ))}
+                      </div>
+                      {calendarDays.map((day) => {
+                        const dayKey = toDateInput(day);
+                        const dayAppointments = visibleAppointments.filter(
+                          (appointment) => toDateInput(new Date(appointment.startAt)) === dayKey
+                        );
+
+                        return (
+                          <div className="calendar-day" key={dayKey}>
+                            <div className="calendar-day-head">
+                              <span>{dayLabels[day.getDay()]}</span>
+                              <strong>{day.getDate()}</strong>
+                            </div>
+                            <div className="calendar-day-body">
+                              {calendarHours.map((hour) => (
+                                <span className="calendar-hour-line" key={hour} />
+                              ))}
+                              {dayAppointments.map((appointment) => {
+                                const startHour = getHourPosition(appointment.startAt);
+                                const endHour = getHourPosition(appointment.endAt);
+                                const top = Math.max(0, (startHour - 8) * 64);
+                                const height = Math.max(44, (endHour - startHour) * 64);
+
+                                return (
+                                  <article
+                                    className={`calendar-event ${
+                                      statusClass[appointment.status] ?? "scheduled"
+                                    }`}
+                                    key={appointment.id}
+                                    style={{ top: `${top}px`, minHeight: `${height}px` }}
+                                  >
+                                    <strong>{appointment.client.name}</strong>
+                                    <span>
+                                      {formatTime(appointment.startAt)} - {formatTime(appointment.endAt)}
+                                    </span>
+                                    <small>{appointment.space?.name ?? "Sem espaco"}</small>
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
 
                 {adminTab === "appointments" && (
                   <>
@@ -1027,6 +1294,133 @@ export default function App() {
                       <span className="notice">Sem notificacoes.</span>
                     )}
                   </>
+                )}
+
+                {adminTab === "settings" && (
+                  <form className="settings-panel" onSubmit={handleAvailabilitySave}>
+                    <div className="settings-head">
+                      <div>
+                        <h2>Personalizacao da agenda</h2>
+                        <span>
+                          Defina dias de funcionamento, horarios e duracao padrao dos atendimentos.
+                        </span>
+                      </div>
+                      <button className="solid-action" type="submit">
+                        Salvar configuracao
+                      </button>
+                    </div>
+                    {loadingAvailability ? (
+                      <span className="notice">Carregando configuracoes...</span>
+                    ) : (
+                      <div className="availability-grid">
+                        {availabilityForm.map((rule, index) => (
+                          <div className="availability-row" key={rule.dayOfWeek}>
+                            <label className="toggle-row">
+                              <input
+                                type="checkbox"
+                                checked={rule.isActive}
+                                onChange={(event) =>
+                                  setAvailabilityForm((prev) =>
+                                    prev.map((item, itemIndex) =>
+                                      itemIndex === index
+                                        ? { ...item, isActive: event.target.checked }
+                                        : item
+                                    )
+                                  )
+                                }
+                              />
+                              {fullDayLabels[rule.dayOfWeek]}
+                            </label>
+                            <input
+                              type="time"
+                              value={rule.startTime}
+                              disabled={!rule.isActive}
+                              onChange={(event) =>
+                                setAvailabilityForm((prev) =>
+                                  prev.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, startTime: event.target.value }
+                                      : item
+                                  )
+                                )
+                              }
+                            />
+                            <input
+                              type="time"
+                              value={rule.endTime}
+                              disabled={!rule.isActive}
+                              onChange={(event) =>
+                                setAvailabilityForm((prev) =>
+                                  prev.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, endTime: event.target.value }
+                                      : item
+                                  )
+                                )
+                              }
+                            />
+                            <input
+                              type="number"
+                              min="15"
+                              step="15"
+                              value={rule.slotMinutes}
+                              disabled={!rule.isActive}
+                              onChange={(event) =>
+                                setAvailabilityForm((prev) =>
+                                  prev.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, slotMinutes: event.target.value }
+                                      : item
+                                  )
+                                )
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </form>
+                )}
+
+                {adminTab === "google" && (
+                  <section className="google-panel">
+                    <div>
+                      <h2>Google Agenda</h2>
+                      <p>
+                        A Fase 3 prepara a conexao OAuth 2.0 para exportar compromissos
+                        e futuramente importar eventos externos para evitar conflitos.
+                      </p>
+                    </div>
+                    {loadingGoogle ? (
+                      <span className="notice">Verificando integracao...</span>
+                    ) : (
+                      <div className="google-card">
+                        <strong>
+                          {googleStatus?.configured
+                            ? "OAuth configurado"
+                            : "OAuth pendente"}
+                        </strong>
+                        <span>
+                          {googleStatus?.message ??
+                            "Abra esta aba para verificar a configuracao do Google Calendar."}
+                        </span>
+                        <div className="google-actions">
+                          {googleStatus?.authUrl && (
+                            <a href={googleStatus.authUrl} target="_blank" rel="noreferrer">
+                              Conectar Google
+                            </a>
+                          )}
+                          <button
+                            className="outline-action"
+                            type="button"
+                            onClick={handleGoogleExport}
+                          >
+                            Exportar agenda
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </section>
                 )}
 
                 {adminMessage && <span className="notice">{adminMessage}</span>}

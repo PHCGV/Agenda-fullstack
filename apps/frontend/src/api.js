@@ -2,11 +2,11 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
+    ...options,
     headers: {
       "Content-Type": "application/json",
       ...(options.headers ?? {})
-    },
-    ...options
+    }
   });
 
   const data = await response.json().catch(() => ({}));
@@ -64,6 +64,41 @@ export function getAppointments(from, to, accessToken) {
   if (to) params.set("to", to);
 
   return request(`/api/admin/appointments?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function getAvailabilityRules(accessToken) {
+  return request("/api/admin/availability", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function updateAvailabilityRules(rules, accessToken) {
+  return request("/api/admin/availability", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({ rules })
+  });
+}
+
+export function getGoogleCalendarStatus(accessToken) {
+  return request("/api/admin/google-calendar/status", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function exportAppointmentsToGoogle(accessToken) {
+  return request("/api/admin/google-calendar/export", {
+    method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`
     }
