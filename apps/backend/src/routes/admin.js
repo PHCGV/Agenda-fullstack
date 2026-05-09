@@ -5,6 +5,9 @@ import {
   createSpace,
   deleteBlockedPeriod,
   deleteSpace,
+  exportAppointmentsToGoogle,
+  getGoogleCalendarStatus,
+  listAvailability,
   listAppointments,
   listBlockedPeriods,
   listNotifications,
@@ -23,7 +26,10 @@ router.use(requireRole("ADMIN"));
 router.get("/appointments", listAppointments);
 router.patch("/appointments/:id/status", updateAppointmentStatus);
 router.patch("/appointments/:id/space", updateAppointmentSpace);
+router.get("/availability", listAvailability);
 router.post("/availability", updateAvailability);
+router.get("/google-calendar/status", getGoogleCalendarStatus);
+router.post("/google-calendar/export", exportAppointmentsToGoogle);
 router.get("/spaces", listSpaces);
 router.post("/spaces", createSpace);
 router.patch("/spaces/:id", updateSpace);

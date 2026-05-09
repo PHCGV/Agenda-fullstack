@@ -64,5 +64,7 @@ export const config = {
   resendFrom: process.env.RESEND_FROM ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
   adminEmail: process.env.ADMIN_EMAIL ?? "",
-  adminPassword: process.env.ADMIN_PASSWORD ?? ""
+  adminPassword: process.env.ADMIN_PASSWORD ?? "",
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleRedirectUri: process.env.GOOGLE_REDIRECT_URI ?? ""
 };

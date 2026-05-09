@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.js";
+import { config } from "../config/env.js";
 import { sendError, sendOk } from "../utils/http.js";
 import { isTimeRangeValid } from "../utils/blockedPeriods.js";
 
@@ -122,6 +123,20 @@ export async function updateAppointmentSpace(req, res) {
   }
 }
 
+export async function listAvailability(req, res) {
+  try {
+    const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+    const rules = await prisma.availabilityRule.findMany({
+      where: { userId },
+      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }]
+    });
+
+    return sendOk(res, rules);
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
 export async function updateAvailability(req, res) {
   try {
     const { rules, userId } = req.body ?? {};
@@ -150,6 +165,46 @@ export async function updateAvailability(req, res) {
     });
 
     return sendOk(res, { ok: true });
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
+export async function getGoogleCalendarStatus(req, res) {
+  try {
+    const configured = Boolean(config.googleClientId && config.googleRedirectUri);
+    const authUrl = configured
+      ? `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
+          client_id: config.googleClientId,
+          redirect_uri: config.googleRedirectUri,
+          response_type: "code",
+          scope: "https://www.googleapis.com/auth/calendar.events",
+          access_type: "offline",
+          prompt: "consent"
+        }).toString()}`
+      : null;
+
+    return sendOk(res, {
+      configured,
+      connected: false,
+      authUrl,
+      scopes: ["calendar.events"],
+      message: configured
+        ? "OAuth configurado. Falta concluir callback e armazenamento seguro dos tokens."
+        : "Configure GOOGLE_CLIENT_ID e GOOGLE_REDIRECT_URI para iniciar OAuth com Google Calendar."
+    });
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
+export async function exportAppointmentsToGoogle(req, res) {
+  try {
+    return sendError(
+      res,
+      501,
+      "Google Calendar sync requires OAuth token storage before exporting appointments"
+    );
   } catch (error) {
     return sendError(res, 500, "Unexpected error");
   }
