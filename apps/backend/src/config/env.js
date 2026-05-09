@@ -39,6 +39,15 @@ function requireValue(name) {
   return value;
 }
 
+function parseCsvNumbers(value, fallback) {
+  if (!value) return fallback;
+  const numbers = value
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => !Number.isNaN(item) && item > 0);
+  return numbers.length ? numbers : fallback;
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
   databaseUrl: requireValue("DATABASE_URL"),
@@ -46,9 +55,14 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "1h",
   refreshTokenDays: Number(process.env.REFRESH_TOKEN_DAYS ?? 14),
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
+  publicApiUrl: process.env.PUBLIC_API_URL ?? "http://localhost:4000",
   defaultSlotMinutes: Number(process.env.DEFAULT_SLOT_MINUTES ?? 60),
   defaultWorkStart: process.env.DEFAULT_WORK_START ?? "09:00",
   defaultWorkEnd: process.env.DEFAULT_WORK_END ?? "17:00",
+  reminderOffsets: parseCsvNumbers(process.env.REMINDER_OFFSETS_MINUTES, [1440, 60]),
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  resendFrom: process.env.RESEND_FROM ?? "",
+  cronSecret: process.env.CRON_SECRET ?? "",
   adminEmail: process.env.ADMIN_EMAIL ?? "",
   adminPassword: process.env.ADMIN_PASSWORD ?? ""
 };
