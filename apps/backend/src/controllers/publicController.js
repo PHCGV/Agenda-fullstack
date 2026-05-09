@@ -6,15 +6,32 @@ import { filterBlockedSlots, isSlotBlocked } from "../utils/blockedPeriods.js";
 import { addMinutes, toUtcDate } from "../utils/time.js";
 import { buildReminderNotifications } from "../utils/notifications.js";
 
+/**
+ * Calcula o intervalo UTC completo de um dia para consultas de agenda.
+ *
+ * @param {string} dateString Data no formato YYYY-MM-DD.
+ * @return {{ start: Date, end: Date }} Intervalo inicial e final do dia.
+ */
 function getDayRange(dateString) {
   const start = toUtcDate(dateString, "00:00");
   const end = toUtcDate(dateString, "23:59");
   return { start, end };
 }
 
+/**
+ * Resolve o profissional informado, aceitando apenas usuarios elegiveis para agenda.
+ *
+ * @param {string|undefined} professionalId Identificador opcional do profissional.
+ * @return {Promise<object|null>} Profissional encontrado ou null.
+ */
 async function resolveProfessional(professionalId) {
   if (professionalId) {
-    return prisma.user.findUnique({ where: { id: professionalId } });
+    return prisma.user.findFirst({
+      where: {
+        id: professionalId,
+        role: { in: ["PROFESSIONAL", "ADMIN"] }
+      }
+    });
   }
 
   return prisma.user.findFirst({
@@ -22,6 +39,13 @@ async function resolveProfessional(professionalId) {
   });
 }
 
+/**
+ * Lista os profissionais disponiveis para a area publica de agendamento.
+ *
+ * @param {import("express").Request} req Requisicao HTTP recebida.
+ * @param {import("express").Response} res Resposta HTTP enviada ao cliente.
+ * @return {Promise<void>}
+ */
 export async function listProfessionals(req, res) {
   try {
     const professionals = await prisma.user.findMany({
@@ -35,6 +59,13 @@ export async function listProfessionals(req, res) {
   }
 }
 
+/**
+ * Retorna os horarios livres para uma data e profissional especificos.
+ *
+ * @param {import("express").Request} req Requisicao HTTP recebida.
+ * @param {import("express").Response} res Resposta HTTP enviada ao cliente.
+ * @return {Promise<void>}
+ */
 export async function getAvailability(req, res) {
   try {
     const date = req.query.date;
@@ -84,10 +115,14 @@ export async function getAvailability(req, res) {
 
     const blockedPeriods = await prisma.blockedPeriod.findMany({
       where: {
-        OR: [{ userId: professional.id }, { userId: null }],
-        OR: [
-          { isRecurring: false, startAt: { lt: end }, endAt: { gt: start } },
-          { isRecurring: true, dayOfWeek }
+        AND: [
+          { OR: [{ userId: professional.id }, { userId: null }] },
+          {
+            OR: [
+              { isRecurring: false, startAt: { lt: end }, endAt: { gt: start } },
+              { isRecurring: true, dayOfWeek }
+            ]
+          }
         ]
       }
     });
@@ -110,6 +145,13 @@ export async function getAvailability(req, res) {
   }
 }
 
+/**
+ * Cria um novo agendamento publico e agenda os lembretes automaticos.
+ *
+ * @param {import("express").Request} req Requisicao HTTP recebida.
+ * @param {import("express").Response} res Resposta HTTP enviada ao cliente.
+ * @return {Promise<void>}
+ */
 export async function createAppointment(req, res) {
   try {
     const { client, startAt, professionalId, notes, spaceId } = req.body ?? {};
@@ -170,10 +212,14 @@ export async function createAppointment(req, res) {
 
     const blockedPeriods = await prisma.blockedPeriod.findMany({
       where: {
-        OR: [{ userId: professional.id }, { userId: null }],
-        OR: [
-          { isRecurring: false, startAt: { lt: endDate }, endAt: { gt: startDate } },
-          { isRecurring: true, dayOfWeek: startDate.getUTCDay() }
+        AND: [
+          { OR: [{ userId: professional.id }, { userId: null }] },
+          {
+            OR: [
+              { isRecurring: false, startAt: { lt: endDate }, endAt: { gt: startDate } },
+              { isRecurring: true, dayOfWeek: startDate.getUTCDay() }
+            ]
+          }
         ]
       }
     });

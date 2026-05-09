@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  cancelNotification,
   createAppointment,
   createBlockedPeriod,
   createSpace,
@@ -82,18 +83,40 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function isValidDate(date) {
+  return date instanceof Date && !Number.isNaN(date.getTime());
+}
+
+function parseDateInput(value) {
+  if (typeof value !== "string" || !value) {
+    return null;
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  return isValidDate(parsed) ? parsed : null;
+}
+
 function toDateInput(date) {
+  if (!isValidDate(date)) {
+    return "";
+  }
   return date.toISOString().slice(0, 10);
 }
 
 function addDays(date, days) {
   const next = new Date(date);
+  if (!isValidDate(next)) {
+    return new Date();
+  }
   next.setDate(next.getDate() + days);
   return next;
 }
 
 function startOfWeek(date) {
   const start = new Date(date);
+  if (!isValidDate(start)) {
+    return new Date();
+  }
   start.setHours(0, 0, 0, 0);
   start.setDate(start.getDate() - start.getDay());
   return start;
@@ -105,6 +128,7 @@ function getHourPosition(iso) {
 }
 
 export default function App() {
+  const initialDate = new Date();
   const [view, setView] = useState("login");
   const [professionals, setProfessionals] = useState([]);
   const [professionalId, setProfessionalId] = useState("");
@@ -131,12 +155,18 @@ export default function App() {
       return null;
     }
   });
-  const [appointments, setAppointments] = useState([]);
+  const [calendarAppointments, setCalendarAppointments] = useState([]);
+  const [listAppointmentsData, setListAppointmentsData] = useState([]);
   const [adminMessage, setAdminMessage] = useState("");
   const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [loadingListAppointments, setLoadingListAppointments] = useState(false);
   const [adminTab, setAdminTab] = useState("calendar");
   const [calendarMode, setCalendarMode] = useState("week");
   const [calendarDate, setCalendarDate] = useState(today());
+  const [listFilters, setListFilters] = useState(() => ({
+    from: toDateInput(initialDate),
+    to: toDateInput(addDays(initialDate, 120))
+  }));
   const [spaces, setSpaces] = useState([]);
   const [spaceForm, setSpaceForm] = useState({
     name: "",
@@ -154,6 +184,11 @@ export default function App() {
     reason: ""
   });
   const [notifications, setNotifications] = useState([]);
+  const [notificationFilters, setNotificationFilters] = useState(() => ({
+    from: "",
+    to: "",
+    status: "PENDING"
+  }));
   const [availabilityRules, setAvailabilityRules] = useState([]);
   const [availabilityForm, setAvailabilityForm] = useState(() =>
     fullDayLabels.map((_, dayOfWeek) => ({
@@ -168,8 +203,11 @@ export default function App() {
   const [loadingSpaces, setLoadingSpaces] = useState(false);
   const [loadingBlocked, setLoadingBlocked] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [processingNotificationId, setProcessingNotificationId] = useState("");
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const isAdmin = auth?.user?.role === "ADMIN";
+  const panelTitle = isAdmin ? "Administrativo" : "Painel do profissional";
 
   useEffect(() => {
     getProfessionals()
@@ -239,6 +277,7 @@ export default function App() {
       localStorage.setItem(storageKey, JSON.stringify(payload));
       localStorage.removeItem(legacyStorageKey);
       setAuth(payload);
+      setAdminTab("calendar");
       setView("admin");
     } catch (error) {
       setAdminMessage(error.message);
@@ -252,19 +291,21 @@ export default function App() {
     localStorage.removeItem(storageKey);
     localStorage.removeItem(legacyStorageKey);
     setAuth(null);
-    setAppointments([]);
+    setCalendarAppointments([]);
+    setListAppointmentsData([]);
+    setNotifications([]);
     setView("login");
   }
 
   const calendarRange = useMemo(() => {
-    const selected = new Date(`${calendarDate}T00:00:00`);
+    const selected = parseDateInput(calendarDate) ?? parseDateInput(today()) ?? new Date();
     const start = calendarMode === "day" ? selected : startOfWeek(selected);
     const days = calendarMode === "day" ? 1 : 7;
     const end = addDays(start, days);
     return { start, end, days };
   }, [calendarDate, calendarMode]);
 
-  async function loadAppointments() {
+  async function loadCalendarAppointments() {
     if (!auth?.accessToken) return;
     setLoadingAppointments(true);
     setAdminMessage("");
@@ -272,11 +313,31 @@ export default function App() {
       const from = calendarRange.start.toISOString();
       const to = calendarRange.end.toISOString();
       const data = await getAppointments(from, to, auth.accessToken);
-      setAppointments(data);
+      setCalendarAppointments(data);
     } catch (error) {
       setAdminMessage(error.message);
     } finally {
       setLoadingAppointments(false);
+    }
+  }
+
+  async function loadListAppointments() {
+    if (!auth?.accessToken) return;
+    setLoadingListAppointments(true);
+    setAdminMessage("");
+    try {
+      const fromDate = parseDateInput(listFilters.from);
+      const toDate = parseDateInput(listFilters.to);
+      const from = fromDate ? fromDate.toISOString() : null;
+      const to = toDate
+        ? new Date(`${listFilters.to}T23:59:59`).toISOString()
+        : null;
+      const data = await getAppointments(from, to, auth.accessToken);
+      setListAppointmentsData(data);
+    } catch (error) {
+      setAdminMessage(error.message);
+    } finally {
+      setLoadingListAppointments(false);
     }
   }
 
@@ -310,7 +371,14 @@ export default function App() {
     if (!auth?.accessToken) return;
     setLoadingNotifications(true);
     try {
-      const data = await getNotifications(auth.accessToken);
+      const fromDate = parseDateInput(notificationFilters.from);
+      const toDate = parseDateInput(notificationFilters.to);
+      const filters = {
+        ...notificationFilters,
+        from: fromDate ? fromDate.toISOString() : "",
+        to: toDate ? new Date(`${notificationFilters.to}T23:59:59`).toISOString() : ""
+      };
+      const data = await getNotifications(filters, auth.accessToken);
       setNotifications(data);
     } catch (error) {
       setAdminMessage(error.message);
@@ -476,7 +544,7 @@ export default function App() {
     if (!auth?.accessToken) return;
     try {
       await updateAppointmentSpace(appointmentId, spaceId, auth.accessToken);
-      await loadAppointments();
+      await Promise.all([loadCalendarAppointments(), loadListAppointments()]);
     } catch (error) {
       setAdminMessage(error.message);
     }
@@ -486,9 +554,22 @@ export default function App() {
     if (!auth?.accessToken) return;
     try {
       await updateAppointmentStatus(id, status, null, auth.accessToken);
-      await loadAppointments();
+      await Promise.all([loadCalendarAppointments(), loadListAppointments(), loadNotifications()]);
     } catch (error) {
       setAdminMessage(error.message);
+    }
+  }
+
+  async function handleNotificationCancel(id) {
+    if (!auth?.accessToken) return;
+    setProcessingNotificationId(id);
+    try {
+      await cancelNotification(id, auth.accessToken);
+      await loadNotifications();
+    } catch (error) {
+      setAdminMessage(error.message);
+    } finally {
+      setProcessingNotificationId("");
     }
   }
 
@@ -500,19 +581,34 @@ export default function App() {
 
   useEffect(() => {
     if (auth?.accessToken && view === "admin") {
-      loadAppointments();
+      loadCalendarAppointments();
       loadSpaces();
     }
   }, [auth, view, calendarRange.start, calendarRange.end]);
 
   useEffect(() => {
+    if (auth?.accessToken && view === "admin") {
+      loadListAppointments();
+    }
+  }, [auth, view, listFilters.from, listFilters.to]);
+
+  useEffect(() => {
+    if (auth?.accessToken && view === "admin") {
+      loadNotifications();
+    }
+  }, [auth, view, notificationFilters.from, notificationFilters.to, notificationFilters.status]);
+
+  useEffect(() => {
     if (!auth?.accessToken || view !== "admin") return;
+    if (!isAdmin && adminTab === "spaces") {
+      setAdminTab("calendar");
+      return;
+    }
     if (adminTab === "spaces") loadSpaces();
     if (adminTab === "blocked") loadBlockedPeriods();
-    if (adminTab === "notifications") loadNotifications();
     if (adminTab === "settings") loadAvailabilityRules();
     if (adminTab === "google") loadGoogleStatus();
-  }, [adminTab, auth, view]);
+  }, [adminTab, auth, view, isAdmin]);
 
   const slotItems = useMemo(() => {
     return slots.map((slot) => ({
@@ -528,16 +624,18 @@ export default function App() {
   }, [calendarRange]);
 
   const visibleAppointments = useMemo(() => {
-    return appointments.filter((appointment) => {
+    return calendarAppointments.filter((appointment) => {
       const start = new Date(appointment.startAt);
       return start >= calendarRange.start && start < calendarRange.end;
     });
-  }, [appointments, calendarRange]);
+  }, [calendarAppointments, calendarRange]);
 
   const activeSpaces = spaces.filter((space) => space.isActive).length;
   const pendingNotifications = notifications.filter(
     (notification) => notification.status === "PENDING"
   ).length;
+  const summaryAppointments =
+    adminTab === "appointments" ? listAppointmentsData.length : visibleAppointments.length;
 
   if (view === "login" || view === "register" || (view === "admin" && !auth)) {
     return (
@@ -646,7 +744,7 @@ export default function App() {
           ) : (
             <>
               <label>
-                Username
+                E-mail
                 <input type="email" name="email" required />
               </label>
               <label>
@@ -675,16 +773,18 @@ export default function App() {
           >
             Agendamento
           </button>
-          <button
-            type="button"
-            className={adminTab === "spaces" ? "active" : ""}
-            onClick={() => {
-              setView(auth ? "admin" : "login");
-              setAdminTab("spaces");
-            }}
-          >
-            Espacos
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className={adminTab === "spaces" ? "active" : ""}
+              onClick={() => {
+                setView(auth ? "admin" : "login");
+                setAdminTab("spaces");
+              }}
+            >
+              Espacos
+            </button>
+          )}
         </div>
 
         <button
@@ -705,7 +805,7 @@ export default function App() {
               setAdminTab("calendar");
             }}
           >
-            Administrativo
+            {panelTitle}
           </button>
           <button
             type="button"
@@ -846,7 +946,7 @@ export default function App() {
           <section className="section-panel admin-panel">
             <div className="section-title-row">
               <div>
-                <h1>Administrativo</h1>
+                <h1>{panelTitle}</h1>
                 <span>{auth.user.name} · {auth.user.email}</span>
               </div>
               <button className="outline-action" type="button" onClick={handleLogout}>
@@ -869,13 +969,15 @@ export default function App() {
               >
                 Lista
               </button>
-              <button
-                type="button"
-                className={adminTab === "spaces" ? "active" : ""}
-                onClick={() => setAdminTab("spaces")}
-              >
-                Espacos
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className={adminTab === "spaces" ? "active" : ""}
+                  onClick={() => setAdminTab("spaces")}
+                >
+                  Espacos
+                </button>
+              )}
               <button
                 type="button"
                 className={adminTab === "blocked" ? "active" : ""}
@@ -908,7 +1010,7 @@ export default function App() {
 
             <div className="summary-strip">
               <div>
-                <strong>{visibleAppointments.length}</strong>
+                <strong>{summaryAppointments}</strong>
                 <span>Atendimentos</span>
               </div>
               <div>
@@ -1021,14 +1123,36 @@ export default function App() {
 
                 {adminTab === "appointments" && (
                   <>
-                    <button className="outline-action" type="button" onClick={loadAppointments}>
-                      Atualizar agenda
-                    </button>
-                    {loadingAppointments ? (
+                    <form
+                      className="inline-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        loadListAppointments();
+                      }}
+                    >
+                      <input
+                        type="date"
+                        value={listFilters.from}
+                        onChange={(event) =>
+                          setListFilters((prev) => ({ ...prev, from: event.target.value }))
+                        }
+                      />
+                      <input
+                        type="date"
+                        value={listFilters.to}
+                        onChange={(event) =>
+                          setListFilters((prev) => ({ ...prev, to: event.target.value }))
+                        }
+                      />
+                      <button className="outline-action" type="submit">
+                        Filtrar periodo
+                      </button>
+                    </form>
+                    {loadingListAppointments ? (
                       <span className="notice">Carregando atendimentos...</span>
-                    ) : appointments.length ? (
+                    ) : listAppointmentsData.length ? (
                       <div className="record-grid">
-                        {appointments.map((appointment) => (
+                        {listAppointmentsData.map((appointment) => (
                           <article className="record-card" key={appointment.id}>
                             <div className="record-head">
                               <div>
@@ -1086,7 +1210,7 @@ export default function App() {
                   </>
                 )}
 
-                {adminTab === "spaces" && (
+                {isAdmin && adminTab === "spaces" && (
                   <>
                     <form className="inline-form" onSubmit={handleSpaceCreate}>
                       <input
@@ -1275,9 +1399,52 @@ export default function App() {
 
                 {adminTab === "notifications" && (
                   <>
-                    <button className="outline-action" type="button" onClick={loadNotifications}>
-                      Atualizar notificacoes
-                    </button>
+                    <form
+                      className="inline-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        loadNotifications();
+                      }}
+                    >
+                      <input
+                        type="date"
+                        value={notificationFilters.from}
+                        onChange={(event) =>
+                          setNotificationFilters((prev) => ({
+                            ...prev,
+                            from: event.target.value
+                          }))
+                        }
+                      />
+                      <input
+                        type="date"
+                        value={notificationFilters.to}
+                        onChange={(event) =>
+                          setNotificationFilters((prev) => ({
+                            ...prev,
+                            to: event.target.value
+                          }))
+                        }
+                      />
+                      <select
+                        value={notificationFilters.status}
+                        onChange={(event) =>
+                          setNotificationFilters((prev) => ({
+                            ...prev,
+                            status: event.target.value
+                          }))
+                        }
+                      >
+                        <option value="PENDING">Pendentes</option>
+                        <option value="SENT">Enviadas</option>
+                        <option value="FAILED">Falhas</option>
+                        <option value="CANCELED">Canceladas</option>
+                        <option value="">Todas</option>
+                      </select>
+                      <button className="outline-action" type="submit">
+                        Filtrar notificacoes
+                      </button>
+                    </form>
                     {loadingNotifications ? (
                       <span className="notice">Carregando notificacoes...</span>
                     ) : notifications.length ? (
@@ -1285,8 +1452,25 @@ export default function App() {
                         {notifications.map((notification) => (
                           <article className="record-card" key={notification.id}>
                             <h3>{notification.appointment.client.name}</h3>
-                            <span>{formatDate(notification.sendAt)}</span>
-                            <span>{notification.status}</span>
+                            <span>Começa em: {formatDate(notification.appointment.startAt)}</span>
+                            <span>Foi enviado em: {formatDate(notification.sendAt)}</span>
+                            <span>Status: {notification.status}</span>
+                            <span>
+                              Profissional: {notification.appointment.professional.name}
+                            </span>
+                            <button
+                              className="outline-action"
+                              type="button"
+                              disabled={
+                                processingNotificationId === notification.id ||
+                                notification.status === "CANCELED"
+                              }
+                              onClick={() => handleNotificationCancel(notification.id)}
+                            >
+                              {processingNotificationId === notification.id
+                                ? "Cancelando..."
+                                : "Dispensar notificacao"}
+                            </button>
                           </article>
                         ))}
                       </div>

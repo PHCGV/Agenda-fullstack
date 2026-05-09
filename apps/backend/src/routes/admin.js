@@ -1,6 +1,7 @@
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
+  cancelNotification,
   createBlockedPeriod,
   createSpace,
   deleteBlockedPeriod,
@@ -21,22 +22,46 @@ import {
 const router = express.Router();
 
 router.use(requireAuth);
-router.use(requireRole("ADMIN"));
 
-router.get("/appointments", listAppointments);
-router.patch("/appointments/:id/status", updateAppointmentStatus);
-router.patch("/appointments/:id/space", updateAppointmentSpace);
-router.get("/availability", listAvailability);
-router.post("/availability", updateAvailability);
-router.get("/google-calendar/status", getGoogleCalendarStatus);
-router.post("/google-calendar/export", exportAppointmentsToGoogle);
-router.get("/spaces", listSpaces);
-router.post("/spaces", createSpace);
-router.patch("/spaces/:id", updateSpace);
-router.delete("/spaces/:id", deleteSpace);
-router.get("/blocked-periods", listBlockedPeriods);
-router.post("/blocked-periods", createBlockedPeriod);
-router.delete("/blocked-periods/:id", deleteBlockedPeriod);
-router.get("/notifications", listNotifications);
+router.get("/appointments", requireRole(["ADMIN", "PROFESSIONAL"]), listAppointments);
+router.patch(
+  "/appointments/:id/status",
+  requireRole(["ADMIN", "PROFESSIONAL"]),
+  updateAppointmentStatus
+);
+router.patch(
+  "/appointments/:id/space",
+  requireRole(["ADMIN", "PROFESSIONAL"]),
+  updateAppointmentSpace
+);
+router.get("/availability", requireRole(["ADMIN", "PROFESSIONAL"]), listAvailability);
+router.post("/availability", requireRole(["ADMIN", "PROFESSIONAL"]), updateAvailability);
+router.get(
+  "/google-calendar/status",
+  requireRole(["ADMIN", "PROFESSIONAL"]),
+  getGoogleCalendarStatus
+);
+router.post(
+  "/google-calendar/export",
+  requireRole(["ADMIN", "PROFESSIONAL"]),
+  exportAppointmentsToGoogle
+);
+router.get("/spaces", requireRole(["ADMIN", "PROFESSIONAL"]), listSpaces);
+router.post("/spaces", requireRole("ADMIN"), createSpace);
+router.patch("/spaces/:id", requireRole("ADMIN"), updateSpace);
+router.delete("/spaces/:id", requireRole("ADMIN"), deleteSpace);
+router.get("/blocked-periods", requireRole(["ADMIN", "PROFESSIONAL"]), listBlockedPeriods);
+router.post("/blocked-periods", requireRole(["ADMIN", "PROFESSIONAL"]), createBlockedPeriod);
+router.delete(
+  "/blocked-periods/:id",
+  requireRole(["ADMIN", "PROFESSIONAL"]),
+  deleteBlockedPeriod
+);
+router.get("/notifications", requireRole(["ADMIN", "PROFESSIONAL"]), listNotifications);
+router.patch(
+  "/notifications/:id/cancel",
+  requireRole(["ADMIN", "PROFESSIONAL"]),
+  cancelNotification
+);
 
 export default router;

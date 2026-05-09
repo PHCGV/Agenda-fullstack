@@ -189,8 +189,23 @@ export function deleteBlockedPeriod(id, accessToken) {
   });
 }
 
-export function getNotifications(accessToken) {
-  return request("/api/admin/notifications", {
+export function getNotifications(filters, accessToken) {
+  const params = new URLSearchParams();
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.status) params.set("status", filters.status);
+
+  const query = params.toString();
+  return request(`/api/admin/notifications${query ? `?${query}` : ""}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function cancelNotification(id, accessToken) {
+  return request(`/api/admin/notifications/${id}/cancel`, {
+    method: "PATCH",
     headers: {
       Authorization: `Bearer ${accessToken}`
     }
