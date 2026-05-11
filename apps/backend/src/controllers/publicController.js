@@ -4,7 +4,9 @@ import { sendError, sendOk } from "../utils/http.js";
 import { buildSlots, filterConflicts } from "../utils/availability.js";
 import { filterBlockedSlots, isSlotBlocked } from "../utils/blockedPeriods.js";
 import { addMinutes, toUtcDate } from "../utils/time.js";
-import { buildReminderNotifications } from "../utils/notifications.js";
+import { buildReminderNotifications, buildReminderLinks } from "../utils/notifications.js";
+import crypto from "node:crypto";
+import { sendReminderEmail, sendBookingEmailToProfessional } from "../services/email.js";
 
 /**
  * Calcula o intervalo UTC completo de um dia para consultas de agenda.
@@ -248,7 +250,7 @@ export async function createAppointment(req, res) {
       }
     }
 
-    const appointment = await prisma.$transaction(async (tx) => {
+    const appointmentResult = await prisma.$transaction(async (tx) => {
       const savedClient = await tx.client.upsert({
         where: { email: client.email },
         update: { name: client.name, phone: client.phone ?? null },
@@ -285,8 +287,42 @@ export async function createAppointment(req, res) {
         });
       }
 
-      return created;
+      // create a confirmation token / notification for immediate email links
+      const token = crypto.randomBytes(20).toString("hex");
+      await tx.notification.create({
+        data: {
+          appointmentId: created.id,
+          sendAt: new Date(),
+          token
+        }
+      });
+
+      return { created, token };
     });
+
+    const appointment = appointmentResult.created;
+    const confirmationToken = appointmentResult.token;
+
+    // build confirm/cancel links and send immediate emails (non-blocking)
+    try {
+      const { confirmUrl, cancelUrl } = buildReminderLinks(config.publicApiUrl, confirmationToken);
+
+      // send to client (uses the same reminder template)
+      try {
+        await sendReminderEmail({ appointment, confirmUrl, cancelUrl });
+      } catch (err) {
+        console.error("Failed to send client confirmation email:", err?.message ?? err);
+      }
+
+      // send to professional
+      try {
+        await sendBookingEmailToProfessional({ appointment, professionalEmail: professional.email, confirmUrl, cancelUrl });
+      } catch (err) {
+        console.error("Failed to send professional notification email:", err?.message ?? err);
+      }
+    } catch (err) {
+      console.error("Error while building/sending confirmation emails:", err?.message ?? err);
+    }
 
     return sendOk(res, appointment);
   } catch (error) {
