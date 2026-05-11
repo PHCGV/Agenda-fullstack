@@ -831,11 +831,11 @@ export default function App() {
             className="icon-button"
             onClick={() => {
               setView(auth ? "admin" : "login");
-              setAdminTab("notifications");
+              setAdminTab("settings");
             }}
-            aria-label="Notificacoes"
-            title="Notificacoes"
-            >
+            aria-label="Configuracoes"
+            title="Configuracoes"
+          >
             ⚙
           </button>
           <button
