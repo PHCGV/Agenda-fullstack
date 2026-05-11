@@ -135,7 +135,12 @@ export default function App() {
   const [date, setDate] = useState(today());
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState("");
-  const [client, setClient] = useState({ name: "", email: "", phone: "" });
+  const [client, setClient] = useState({
+  name: "",
+  email: "",
+  phone: "",
+  notes: ""
+  });
   const [publicMessage, setPublicMessage] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
 
@@ -247,12 +252,17 @@ export default function App() {
     try {
       setPublicMessage("");
       await createAppointment({
-        client,
+        client: {
+          name: client.name,
+          email: client.email,
+          phone: client.phone
+        },
+        notes: client.notes,
         startAt: selectedSlot,
         professionalId: professionalId || undefined
-      });
+    });
       setPublicMessage("Agendamento criado com sucesso!");
-      setClient({ name: "", email: "", phone: "" });
+      setClient({ name: "", email: "", phone: "", notes: "" });
       await loadAvailability();
     } catch (error) {
       setPublicMessage(error.message);
@@ -917,6 +927,17 @@ export default function App() {
                       onChange={(event) =>
                         setClient((prev) => ({ ...prev, phone: event.target.value }))
                       }
+                    />
+                  </label>
+
+                  <label className="full-width">
+                    Descrição do Problema
+                    <textarea className="description"
+                      value={client.notes}
+                      onChange={(event) =>
+                        setClient((prev) => ({ ...prev, notes: event.target.value }))
+                      }
+                      rows={4}
                     />
                   </label>
                 </div>
