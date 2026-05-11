@@ -51,6 +51,15 @@ const fullDayLabels = [
   "Sabado"
 ];
 const calendarHours = Array.from({ length: 11 }, (_, index) => index + 8);
+const dayEventClass = [
+  "event-sunday",
+  "event-monday",
+  "event-tuesday",
+  "event-wednesday",
+  "event-thursday",
+  "event-friday",
+  "event-saturday"
+];
 
 function BrandLogo({ compact = false }) {
   return (
@@ -1121,6 +1130,8 @@ export default function App() {
                                 return (
                                   <article
                                     className={`calendar-event ${
+                                      dayEventClass[new Date(appointment.startAt).getDay()]
+                                    } ${
                                       statusClass[appointment.status] ?? "scheduled"
                                     }`}
                                     key={appointment.id}

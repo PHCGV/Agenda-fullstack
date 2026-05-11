@@ -846,3 +846,53 @@ select:disabled {
     flex-direction: column;
   }
 }
+
+.calendar-event.event-sunday {
+  border-left-color: #6b7280;
+  background: #f3f4f6;
+}
+
+.calendar-event.event-monday {
+  border-left-color: #2563eb;
+  background: #dbeafe;
+}
+
+.calendar-event.event-tuesday {
+  border-left-color: #16a34a;
+  background: #dcfce7;
+}
+
+.calendar-event.event-wednesday {
+  border-left-color: #f97316;
+  background: #ffedd5;
+}
+
+.calendar-event.event-thursday {
+  border-left-color: #7c3aed;
+  background: #ede9fe;
+}
+
+.calendar-event.event-friday {
+  border-left-color: #dc2626;
+  background: #fee2e2;
+}
+
+.calendar-event.event-saturday {
+  border-left-color: #0891b2;
+  background: #cffafe;
+}
+
+.full-width {
+  width: 100%;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  border: none;
+  border-radius: 14px;
+  background: #e9e9e9;
+  padding: 16px;
+  font: inherit;
+  outline: none;
+}
