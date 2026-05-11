@@ -896,3 +896,68 @@ textarea {
   font: inherit;
   outline: none;
 }
+
+.calendar-event {
+  cursor: pointer;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 24px;
+}
+
+.appointment-modal {
+  width: min(520px, 100%);
+  background: #ffffff;
+  border: 2px solid #000;
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 2px solid #000;
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.modal-head span {
+  font-weight: 700;
+  color: #444;
+}
+
+.modal-close {
+  width: 42px;
+  height: 42px;
+  border: 2px solid #000;
+  border-radius: 50%;
+  background: #fff;
+  font-size: 28px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.modal-info {
+  display: grid;
+  gap: 10px;
+}
+
+.modal-info p {
+  margin: 0;
+  font-size: 16px;
+}

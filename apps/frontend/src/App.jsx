@@ -152,6 +152,7 @@ export default function App() {
   });
   const [publicMessage, setPublicMessage] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
 
   const [auth, setAuth] = useState(() => {
     const stored =
@@ -1136,6 +1137,9 @@ export default function App() {
                                     }`}
                                     key={appointment.id}
                                     style={{ top: `${top}px`, minHeight: `${height}px` }}
+                                    onClick={() => setSelectedAppointment(appointment)}
+                                    role="button"
+                                    tabIndex={0}
                                   >
                                     <strong>{appointment.client.name}</strong>
                                     <span>
@@ -1643,6 +1647,76 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {selectedAppointment && (
+      <div
+        className="modal-overlay"
+        onClick={() => setSelectedAppointment(null)}
+      >
+        <div
+          className="appointment-modal"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="modal-head">
+            <div>
+              <h2>{selectedAppointment.client?.name}</h2>
+              <span>
+                {formatTime(selectedAppointment.startAt)} -{" "}
+                {formatTime(selectedAppointment.endAt)}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setSelectedAppointment(null)}
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="modal-info">
+            <p>
+              <strong>Status:</strong>{" "}
+              {statusLabels[selectedAppointment.status] ?? selectedAppointment.status}
+            </p>
+
+            <p>
+              <strong>Data:</strong>{" "}
+              {new Date(selectedAppointment.startAt).toLocaleDateString("pt-BR")}
+            </p>
+
+            <p>
+              <strong>Cliente:</strong> {selectedAppointment.client?.name ?? "-"}
+            </p>
+
+            <p>
+              <strong>E-mail:</strong> {selectedAppointment.client?.email ?? "-"}
+            </p>
+
+            <p>
+              <strong>Telefone:</strong> {selectedAppointment.client?.phone ?? "-"}
+            </p>
+
+            <p>
+              <strong>Profissional:</strong>{" "}
+              {selectedAppointment.professional?.name ?? "-"}
+            </p>
+
+            <p>
+              <strong>Espaço:</strong>{" "}
+              {selectedAppointment.space?.name ?? "Sem espaço"}
+            </p>
+
+            <p>
+              <strong>Descrição:</strong>{" "}
+              {selectedAppointment.notes || "Sem descrição"}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
+      
   );
 }
