@@ -51,6 +51,15 @@ const fullDayLabels = [
   "Sabado"
 ];
 const calendarHours = Array.from({ length: 11 }, (_, index) => index + 8);
+const dayEventClass = [
+  "event-sunday",
+  "event-monday",
+  "event-tuesday",
+  "event-wednesday",
+  "event-thursday",
+  "event-friday",
+  "event-saturday"
+];
 
 function BrandLogo({ compact = false }) {
   return (
@@ -135,9 +144,15 @@ export default function App() {
   const [date, setDate] = useState(today());
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState("");
-  const [client, setClient] = useState({ name: "", email: "", phone: "" });
+  const [client, setClient] = useState({
+  name: "",
+  email: "",
+  phone: "",
+  notes: ""
+  });
   const [publicMessage, setPublicMessage] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
 
   const [auth, setAuth] = useState(() => {
     const stored =
@@ -247,12 +262,17 @@ export default function App() {
     try {
       setPublicMessage("");
       await createAppointment({
-        client,
+        client: {
+          name: client.name,
+          email: client.email,
+          phone: client.phone
+        },
+        notes: client.notes,
         startAt: selectedSlot,
         professionalId: professionalId || undefined
-      });
+    });
       setPublicMessage("Agendamento criado com sucesso!");
-      setClient({ name: "", email: "", phone: "" });
+      setClient({ name: "", email: "", phone: "", notes: "" });
       await loadAvailability();
     } catch (error) {
       setPublicMessage(error.message);
@@ -812,11 +832,11 @@ export default function App() {
             className="icon-button"
             onClick={() => {
               setView(auth ? "admin" : "login");
-              setAdminTab("notifications");
+              setAdminTab("settings");
             }}
-            aria-label="Notificacoes"
-            title="Notificacoes"
-            >
+            aria-label="Configuracoes"
+            title="Configuracoes"
+          >
             ⚙
           </button>
           <button
@@ -917,6 +937,17 @@ export default function App() {
                       onChange={(event) =>
                         setClient((prev) => ({ ...prev, phone: event.target.value }))
                       }
+                    />
+                  </label>
+
+                  <label className="full-width">
+                    Descrição do Problema
+                    <textarea className="description"
+                      value={client.notes}
+                      onChange={(event) =>
+                        setClient((prev) => ({ ...prev, notes: event.target.value }))
+                      }
+                      rows={4}
                     />
                   </label>
                 </div>
@@ -1100,10 +1131,15 @@ export default function App() {
                                 return (
                                   <article
                                     className={`calendar-event ${
+                                      dayEventClass[new Date(appointment.startAt).getDay()]
+                                    } ${
                                       statusClass[appointment.status] ?? "scheduled"
                                     }`}
                                     key={appointment.id}
                                     style={{ top: `${top}px`, minHeight: `${height}px` }}
+                                    onClick={() => setSelectedAppointment(appointment)}
+                                    role="button"
+                                    tabIndex={0}
                                   >
                                     <strong>{appointment.client.name}</strong>
                                     <span>
@@ -1611,6 +1647,76 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {selectedAppointment && (
+      <div
+        className="modal-overlay"
+        onClick={() => setSelectedAppointment(null)}
+      >
+        <div
+          className="appointment-modal"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="modal-head">
+            <div>
+              <h2>{selectedAppointment.client?.name}</h2>
+              <span>
+                {formatTime(selectedAppointment.startAt)} -{" "}
+                {formatTime(selectedAppointment.endAt)}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setSelectedAppointment(null)}
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="modal-info">
+            <p>
+              <strong>Status:</strong>{" "}
+              {statusLabels[selectedAppointment.status] ?? selectedAppointment.status}
+            </p>
+
+            <p>
+              <strong>Data:</strong>{" "}
+              {new Date(selectedAppointment.startAt).toLocaleDateString("pt-BR")}
+            </p>
+
+            <p>
+              <strong>Cliente:</strong> {selectedAppointment.client?.name ?? "-"}
+            </p>
+
+            <p>
+              <strong>E-mail:</strong> {selectedAppointment.client?.email ?? "-"}
+            </p>
+
+            <p>
+              <strong>Telefone:</strong> {selectedAppointment.client?.phone ?? "-"}
+            </p>
+
+            <p>
+              <strong>Profissional:</strong>{" "}
+              {selectedAppointment.professional?.name ?? "-"}
+            </p>
+
+            <p>
+              <strong>Espaço:</strong>{" "}
+              {selectedAppointment.space?.name ?? "Sem espaço"}
+            </p>
+
+            <p>
+              <strong>Descrição:</strong>{" "}
+              {selectedAppointment.notes || "Sem descrição"}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
+      
   );
 }
