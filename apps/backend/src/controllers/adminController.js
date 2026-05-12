@@ -2,6 +2,61 @@ import { prisma } from "../db/prisma.js";
 import { config } from "../config/env.js";
 import { sendError, sendOk } from "../utils/http.js";
 import { isTimeRangeValid } from "../utils/blockedPeriods.js";
+import { buildDefaultAvailabilityRules } from "../utils/defaultAvailability.js";
+
+const defaultAvatarIcon = "dot";
+const allowedAvatarIcons = new Set([
+  "dot",
+  "diamond",
+  "sun",
+  "leaf",
+  "grid",
+  "spark"
+]);
+const signupRequestSelect = {
+  id: true,
+  name: true,
+  email: true,
+  status: true,
+  rejectionReason: true,
+  reviewedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  reviewedBy: {
+    select: { id: true, name: true, email: true }
+  }
+};
+
+function formatGoogleCalendarDate(date) {
+  return new Date(date).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function buildGoogleCalendarUrl(appointment) {
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `Consolium | ${appointment.client?.name ?? "Atendimento"}`,
+    dates: `${formatGoogleCalendarDate(appointment.startAt)}/${formatGoogleCalendarDate(appointment.endAt)}`,
+    details: [
+      `Cliente: ${appointment.client?.name ?? "-"}`,
+      `E-mail: ${appointment.client?.email ?? "-"}`,
+      `Profissional: ${appointment.professional?.name ?? "-"}`,
+      `Status no Consolium: ${appointment.status}`,
+      appointment.notes ? `Descrição: ${appointment.notes}` : null
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    location: appointment.space?.name ?? "Consolium"
+  });
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function attachCalendarLinks(appointment) {
+  return {
+    ...appointment,
+    googleCalendarUrl: buildGoogleCalendarUrl(appointment)
+  };
+}
 
 /**
  * Informa se a requisicao atual pertence a um usuario profissional.
@@ -11,6 +66,17 @@ import { isTimeRangeValid } from "../utils/blockedPeriods.js";
  */
 function isProfessionalUser(req) {
   return req.user?.role === "PROFESSIONAL";
+}
+
+async function ensureGlobalAvatarSetting() {
+  return prisma.systemSetting.upsert({
+    where: { key: "globalAvatarIcon" },
+    update: {},
+    create: {
+      key: "globalAvatarIcon",
+      value: defaultAvatarIcon
+    }
+  });
 }
 
 /**
@@ -77,6 +143,7 @@ export async function listAppointments(req, res) {
     const to = typeof req.query.to === "string" ? req.query.to : null;
     const professionalId =
       typeof req.query.professionalId === "string" ? req.query.professionalId : null;
+    const includeCanceled = req.query.includeCanceled === "true";
 
     const fromDate = from ? new Date(from) : new Date();
     const toDate = to
@@ -95,7 +162,8 @@ export async function listAppointments(req, res) {
             ? { professionalId }
             : {}),
         startAt: { lt: toDate },
-        endAt: { gt: fromDate }
+        endAt: { gt: fromDate },
+        ...(includeCanceled ? {} : { status: { not: "CANCELED" } })
       },
       orderBy: { startAt: "asc" },
       include: {
@@ -105,7 +173,7 @@ export async function listAppointments(req, res) {
       }
     });
 
-    return sendOk(res, appointments);
+    return sendOk(res, appointments.map(attachCalendarLinks));
   } catch (error) {
     return sendError(res, 500, "Unexpected error");
   }
@@ -177,7 +245,7 @@ export async function updateAppointmentStatus(req, res) {
       return updatedAppointment;
     });
 
-    return sendOk(res, appointment);
+    return sendOk(res, attachCalendarLinks(appointment));
   } catch (error) {
     return sendError(res, 500, "Unexpected error");
   }
@@ -395,6 +463,143 @@ export async function exportAppointmentsToGoogle(req, res) {
       501,
       "Google Calendar sync is not ready yet. OAuth callback and token storage still need to be implemented in Phase 3."
     );
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
+export async function listStaffSignupRequests(req, res) {
+  try {
+    const status = typeof req.query.status === "string" ? req.query.status : null;
+    const requests = await prisma.staffSignupRequest.findMany({
+      where: status ? { status } : undefined,
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      select: signupRequestSelect
+    });
+
+    return sendOk(res, requests);
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
+export async function approveStaffSignupRequest(req, res) {
+  try {
+    const existingRequest = await prisma.staffSignupRequest.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!existingRequest) {
+      return sendError(res, 404, "Signup request not found");
+    }
+
+    if (existingRequest.status !== "PENDING") {
+      return sendError(res, 409, "Signup request has already been reviewed");
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email: existingRequest.email }
+    });
+
+    if (existingUser) {
+      return sendError(res, 409, "Email is already registered");
+    }
+
+    const approved = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          name: existingRequest.name,
+          email: existingRequest.email,
+          passwordHash: existingRequest.passwordHash,
+          role: "PROFESSIONAL"
+        }
+      });
+
+      await tx.availabilityRule.createMany({
+        data: buildDefaultAvailabilityRules(createdUser.id)
+      });
+
+      return tx.staffSignupRequest.update({
+        where: { id: existingRequest.id },
+        data: {
+          status: "APPROVED",
+          reviewedAt: new Date(),
+          reviewedById: req.user.id,
+          rejectionReason: null
+        },
+        select: signupRequestSelect
+      });
+    });
+
+    return sendOk(res, approved);
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
+export async function rejectStaffSignupRequest(req, res) {
+  try {
+    const { rejectionReason } = req.body ?? {};
+    const existingRequest = await prisma.staffSignupRequest.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!existingRequest) {
+      return sendError(res, 404, "Signup request not found");
+    }
+
+    if (existingRequest.status !== "PENDING") {
+      return sendError(res, 409, "Signup request has already been reviewed");
+    }
+
+    const rejected = await prisma.staffSignupRequest.update({
+      where: { id: existingRequest.id },
+      data: {
+        status: "REJECTED",
+        reviewedAt: new Date(),
+        reviewedById: req.user.id,
+        rejectionReason: rejectionReason?.trim() || null
+      },
+      select: signupRequestSelect
+    });
+
+    return sendOk(res, rejected);
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
+export async function listSystemSettings(req, res) {
+  try {
+    const avatarSetting = await ensureGlobalAvatarSetting();
+
+    return sendOk(res, {
+      globalAvatarIcon: avatarSetting.value
+    });
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
+export async function updateGlobalAvatar(req, res) {
+  try {
+    const { icon } = req.body ?? {};
+    if (!icon || !allowedAvatarIcons.has(icon)) {
+      return sendError(res, 400, "Invalid avatar icon");
+    }
+
+    const avatarSetting = await prisma.systemSetting.upsert({
+      where: { key: "globalAvatarIcon" },
+      update: { value: icon },
+      create: {
+        key: "globalAvatarIcon",
+        value: icon
+      }
+    });
+
+    return sendOk(res, {
+      globalAvatarIcon: avatarSetting.value
+    });
   } catch (error) {
     return sendError(res, 500, "Unexpected error");
   }

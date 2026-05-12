@@ -87,6 +87,12 @@ button:active{
   gap: 14px;
 }
 
+.login-card--home {
+  min-height: auto;
+  gap: 24px;
+  text-align: center;
+}
+
 .login-card--register .brand-logo {
   font-size: 46px;
 }
@@ -153,6 +159,22 @@ button:active{
   color: var(--white);
 }
 
+.home-intro,
+.home-actions {
+  display: grid;
+  gap: 14px;
+}
+
+.home-intro strong {
+  font-size: 20px;
+  text-transform: uppercase;
+}
+
+.home-intro span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .login-form,
 .booking-form {
   display: grid;
@@ -212,6 +234,15 @@ select:focus {
   color: var(--white);
 }
 
+.text-action {
+  justify-self: center;
+  border: 0;
+  background: transparent;
+  color: var(--line);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .main-nav {
   min-height: 96px;
   display: grid;
@@ -221,7 +252,8 @@ select:focus {
   padding: 10px 36px 12px;
   border-bottom: 4px solid var(--black);
   background: var(--white);
-  
+  position: relative;
+  overflow: visible;
 }
 
 .nav-left,
@@ -234,6 +266,7 @@ select:focus {
 .nav-right {
   justify-content: flex-end;
   gap: 34px;
+  position: relative;
 }
 
 .main-nav button {
@@ -274,27 +307,57 @@ select:focus {
   border-radius: 50%;
   background: #ff9561 !important;
   overflow: hidden;
+  color: var(--white);
+  font-size: 28px;
+  font-weight: 900;
 }
 
 .avatar-button span {
-  width: 34px;
-  height: 42px;
-  display: block;
-  position: relative;
-  border-radius: 18px 18px 10px 10px;
-  background: #00669b;
+  line-height: 1;
 }
 
-.avatar-button span::before {
-  content: "";
+.avatar-picker {
   position: absolute;
-  left: 7px;
-  top: -8px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #ffc9ac;
-  box-shadow: -4px -4px 0 #002c5c;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 280px;
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 2px solid var(--black);
+  border-radius: 18px;
+  background: var(--white);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.18);
+  z-index: 10;
+}
+
+.avatar-picker strong {
+  font-size: 18px;
+}
+
+.avatar-picker span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.avatar-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.avatar-picker-grid button {
+  min-height: 58px;
+  border: 2px solid var(--line);
+  background: var(--soft);
+  color: var(--line);
+  font-size: 28px;
+}
+
+.avatar-picker-grid button.active {
+  background: var(--dark-panel);
+  border-color: var(--dark-panel);
+  color: var(--white);
 }
 
 .workspace {
@@ -471,7 +534,7 @@ select:focus {
 
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
 }
 
@@ -521,12 +584,26 @@ select:focus {
   color: var(--success);
 }
 
+.status.approved {
+  color: var(--success);
+}
+
 .status.canceled {
+  color: var(--danger);
+}
+
+.status.rejected {
   color: var(--danger);
 }
 
 .status.completed {
   color: var(--muted);
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .inline-form {
@@ -741,6 +818,15 @@ select:focus {
   align-items: center;
   gap: 10px;
   font-size: 15px;
+}
+
+.toggle-row--compact {
+  width: auto;
+  min-height: 42px;
+  padding: 0 8px;
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: none;
 }
 
 .toggle-row input {

@@ -5,6 +5,7 @@ import { buildSlots, filterConflicts } from "../utils/availability.js";
 import { filterBlockedSlots, isSlotBlocked } from "../utils/blockedPeriods.js";
 import { addMinutes, toUtcDate } from "../utils/time.js";
 import { buildReminderNotifications, buildReminderLinks } from "../utils/notifications.js";
+import { hashPassword } from "../utils/auth.js";
 import crypto from "node:crypto";
 import { sendConfirmationEmail } from "../services/email.js";
 
@@ -56,6 +57,66 @@ export async function listProfessionals(req, res) {
     });
 
     return sendOk(res, professionals);
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
+export async function createStaffSignupRequest(req, res) {
+  try {
+    const { name, email, password } = req.body ?? {};
+    if (!name || !email || !password) {
+      return sendError(res, 400, "Name, email, and password are required");
+    }
+
+    if (!email.includes("@")) {
+      return sendError(res, 400, "Invalid email");
+    }
+
+    if (String(password).length < 6) {
+      return sendError(res, 400, "Password must be at least 6 characters");
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const trimmedName = String(name).trim();
+    if (!trimmedName) {
+      return sendError(res, 400, "Name is required");
+    }
+
+    const [existingUser, existingPendingRequest] = await Promise.all([
+      prisma.user.findUnique({ where: { email: normalizedEmail } }),
+      prisma.staffSignupRequest.findFirst({
+        where: {
+          email: normalizedEmail,
+          status: "PENDING"
+        }
+      })
+    ]);
+
+    if (existingUser) {
+      return sendError(res, 409, "Email is already registered");
+    }
+
+    if (existingPendingRequest) {
+      return sendError(res, 409, "There is already a pending request for this email");
+    }
+
+    const request = await prisma.staffSignupRequest.create({
+      data: {
+        name: trimmedName,
+        email: normalizedEmail,
+        passwordHash: await hashPassword(password)
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        status: true,
+        createdAt: true
+      }
+    });
+
+    return sendOk(res, request);
   } catch (error) {
     return sendError(res, 500, "Unexpected error");
   }
@@ -265,6 +326,7 @@ export async function createAppointment(req, res) {
 
       const created = await tx.appointment.create({
         data: {
+          status: "PENDING",
           clientId: savedClient.id,
           professionalId: professional.id,
           startAt: startDate,
