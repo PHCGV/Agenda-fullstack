@@ -4,9 +4,7 @@ import { sendError, sendOk } from "../utils/http.js";
 import { buildSlots, filterConflicts } from "../utils/availability.js";
 import { filterBlockedSlots, isSlotBlocked } from "../utils/blockedPeriods.js";
 import { addMinutes, toUtcDate } from "../utils/time.js";
-import { buildReminderNotifications, buildReminderLinks } from "../utils/notifications.js";
-import crypto from "node:crypto";
-import { sendConfirmationEmail } from "../services/email.js";
+import { buildReminderNotifications } from "../utils/notifications.js";
 
 /**
  * Calcula o intervalo UTC completo de um dia para consultas de agenda.
@@ -250,8 +248,6 @@ export async function createAppointment(req, res) {
       }
     }
 
-    const confirmationToken = crypto.randomBytes(20).toString("hex");
-
     const appointment = await prisma.$transaction(async (tx) => {
       const savedClient = await tx.client.upsert({
         where: { email: client.email },
@@ -274,7 +270,7 @@ export async function createAppointment(req, res) {
         },
         include: {
           client: { select: { name: true, email: true } },
-          professional: { select: { name: true, email: true } }
+          professional: { select: { name: true } }
         }
       });
 
@@ -289,40 +285,8 @@ export async function createAppointment(req, res) {
         });
       }
 
-      // Create an immediate notification token for confirmation/cancel links
-      await tx.notification.create({
-        data: {
-          appointmentId: created.id,
-          sendAt: new Date(),
-          token: confirmationToken
-        }
-      });
-
       return created;
     });
-
-    // Build confirmation/cancel links and send immediate confirmation emails
-    try {
-      const links = buildReminderLinks(config.publicApiUrl, confirmationToken);
-      await Promise.all([
-        sendConfirmationEmail({
-          appointment,
-          confirmUrl: links.confirmUrl,
-          cancelUrl: links.cancelUrl,
-          to: appointment.client.email,
-          recipientName: appointment.client.name
-        }),
-        sendConfirmationEmail({
-          appointment,
-          confirmUrl: links.confirmUrl,
-          cancelUrl: links.cancelUrl,
-          to: appointment.professional.email,
-          recipientName: appointment.professional.name
-        })
-      ]);
-    } catch (err) {
-      // Do not fail the request if email sending fails
-    }
 
     return sendOk(res, appointment);
   } catch (error) {
