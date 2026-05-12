@@ -744,11 +744,11 @@ export default function App() {
           ) : (
             <>
               <label>
-                E-mail
+                E-mail:
                 <input type="email" name="email" required />
               </label>
               <label>
-                Senha
+                Senha:
                 <input type="password" name="password" required />
               </label>
               <button className="pill-submit" type="submit">
@@ -782,7 +782,7 @@ export default function App() {
                 setAdminTab("spaces");
               }}
             >
-              Espacos
+              Espaços
             </button>
           )}
         </div>
@@ -815,7 +815,7 @@ export default function App() {
               setAdminTab("notifications");
             }}
             aria-label="Notificacoes"
-            title="Notificacoes"
+            title="Notificaoes"
             >
             ⚙
           </button>
@@ -960,7 +960,7 @@ export default function App() {
                 className={adminTab === "calendar" ? "active" : ""}
                 onClick={() => setAdminTab("calendar")}
               >
-                Calendario
+                Calendário
               </button>
               <button
                 type="button"
@@ -975,7 +975,7 @@ export default function App() {
                   className={adminTab === "spaces" ? "active" : ""}
                   onClick={() => setAdminTab("spaces")}
                 >
-                  Espacos
+                  Espaços
                 </button>
               )}
               <button
@@ -990,14 +990,14 @@ export default function App() {
                 className={adminTab === "notifications" ? "active" : ""}
                 onClick={() => setAdminTab("notifications")}
               >
-                Notificacoes
+                Notificações
               </button>
               <button
                 type="button"
                 className={adminTab === "settings" ? "active" : ""}
                 onClick={() => setAdminTab("settings")}
               >
-                Configuracoes
+                Configurações
               </button>
               <button
                 type="button"
@@ -1015,11 +1015,11 @@ export default function App() {
               </div>
               <div>
                 <strong>{activeSpaces}</strong>
-                <span>Espacos ativos</span>
+                <span>Espaços ativos</span>
               </div>
               <div>
                 <strong>{pendingNotifications}</strong>
-                <span>Notificacoes pendentes</span>
+                <span>Notificações pendentes</span>
               </div>
             </div>
 
@@ -1571,7 +1571,7 @@ export default function App() {
                     <div>
                       <h2>Google Agenda</h2>
                       <p>
-                        A Fase 3 prepara a conexao OAuth 2.0 para exportar compromissos
+                        A Fase 3 prepara a conexão OAuth 2.0 para exportar compromissos
                         e futuramente importar eventos externos para evitar conflitos.
                       </p>
                     </div>
