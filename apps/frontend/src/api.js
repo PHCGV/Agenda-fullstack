@@ -37,6 +37,13 @@ export function createAppointment(payload) {
   });
 }
 
+export function createStaffSignupRequest(payload) {
+  return request("/api/public/staff-signup-requests", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function login(payload) {
   return request("/api/auth/login", {
     method: "POST",
@@ -58,10 +65,11 @@ export function logout(refreshToken) {
   });
 }
 
-export function getAppointments(from, to, accessToken) {
+export function getAppointments(from, to, accessToken, options = {}) {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to) params.set("to", to);
+  if (options.includeCanceled) params.set("includeCanceled", "true");
 
   return request(`/api/admin/appointments?${params.toString()}`, {
     headers: {
@@ -189,10 +197,74 @@ export function deleteBlockedPeriod(id, accessToken) {
   });
 }
 
-export function getNotifications(accessToken) {
-  return request("/api/admin/notifications", {
+export function getNotifications(filters, accessToken) {
+  const params = new URLSearchParams();
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.status) params.set("status", filters.status);
+
+  const query = params.toString();
+  return request(`/api/admin/notifications${query ? `?${query}` : ""}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`
     }
+  });
+}
+
+export function cancelNotification(id, accessToken) {
+  return request(`/api/admin/notifications/${id}/cancel`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function getStaffSignupRequests(status, accessToken) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  const query = params.toString();
+
+  return request(`/api/admin/staff-signup-requests${query ? `?${query}` : ""}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function approveStaffSignupRequest(id, accessToken) {
+  return request(`/api/admin/staff-signup-requests/${id}/approve`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function rejectStaffSignupRequest(id, rejectionReason, accessToken) {
+  return request(`/api/admin/staff-signup-requests/${id}/reject`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({ rejectionReason })
+  });
+}
+
+export function getSystemSettings(accessToken) {
+  return request("/api/admin/system-settings", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function updateGlobalAvatar(icon, accessToken) {
+  return request("/api/admin/system-settings/avatar", {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({ icon })
   });
 }

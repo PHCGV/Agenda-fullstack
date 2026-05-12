@@ -8,7 +8,77 @@ function verifyCronSecret(req) {
   if (!config.cronSecret) {
     return true;
   }
-  return req.headers.authorization === `Bearer ${config.cronSecret}`;
+
+  const bearerToken = req.headers.authorization?.replace(/^Bearer\s+/i, "").trim();
+  const headerToken = req.headers["x-cron-secret"];
+
+  return bearerToken === config.cronSecret || headerToken === config.cronSecret;
+}
+
+export async function processPendingReminders(now = new Date()) {
+  const pending = await prisma.notification.findMany({
+    where: {
+      status: "PENDING",
+      sendAt: { lte: now }
+    },
+    include: {
+      appointment: {
+        include: {
+          client: { select: { name: true, email: true } },
+          professional: { select: { name: true } }
+        }
+      }
+    },
+    orderBy: { sendAt: "asc" },
+    take: 50
+  });
+
+  const results = [];
+
+  for (const notification of pending) {
+    if (
+      notification.appointment.status === "CANCELED" ||
+      notification.appointment.status === "COMPLETED"
+    ) {
+      await prisma.notification.update({
+        where: { id: notification.id },
+        data: { status: "CANCELED" }
+      });
+      results.push({ id: notification.id, status: "CANCELED" });
+      continue;
+    }
+
+    const { confirmUrl, cancelUrl } = buildReminderLinks(
+      config.publicApiUrl,
+      notification.token
+    );
+
+    const response = await sendReminderEmail({
+      appointment: notification.appointment,
+      confirmUrl,
+      cancelUrl
+    });
+
+    if (response.ok) {
+      await prisma.notification.update({
+        where: { id: notification.id },
+        data: { status: "SENT", sentAt: new Date(), error: null }
+      });
+      results.push({ id: notification.id, status: "SENT" });
+    } else {
+      await prisma.notification.update({
+        where: { id: notification.id },
+        data: { status: "FAILED", error: response.error ?? "Send failed" }
+      });
+      results.push({
+        id: notification.id,
+        status: "FAILED",
+        error: response.error ?? "Send failed"
+      });
+    }
+  }
+
+  return { processed: results.length, results };
 }
 
 export async function runReminders(req, res) {
@@ -17,66 +87,8 @@ export async function runReminders(req, res) {
       return sendError(res, 401, "Unauthorized");
     }
 
-    const now = new Date();
-    const pending = await prisma.notification.findMany({
-      where: {
-        status: "PENDING",
-        sendAt: { lte: now }
-      },
-      include: {
-        appointment: {
-          include: {
-            client: { select: { name: true, email: true } },
-            professional: { select: { name: true } }
-          }
-        }
-      },
-      orderBy: { sendAt: "asc" },
-      take: 50
-    });
-
-    const results = [];
-
-    for (const notification of pending) {
-      if (
-        notification.appointment.status === "CANCELED" ||
-        notification.appointment.status === "COMPLETED"
-      ) {
-        await prisma.notification.update({
-          where: { id: notification.id },
-          data: { status: "CANCELED" }
-        });
-        results.push({ id: notification.id, status: "CANCELED" });
-        continue;
-      }
-
-      const { confirmUrl, cancelUrl } = buildReminderLinks(
-        config.publicApiUrl,
-        notification.token
-      );
-
-      const response = await sendReminderEmail({
-        appointment: notification.appointment,
-        confirmUrl,
-        cancelUrl
-      });
-
-      if (response.ok) {
-        await prisma.notification.update({
-          where: { id: notification.id },
-          data: { status: "SENT", sentAt: new Date(), error: null }
-        });
-        results.push({ id: notification.id, status: "SENT" });
-      } else {
-        await prisma.notification.update({
-          where: { id: notification.id },
-          data: { status: "FAILED", error: response.error ?? "Send failed" }
-        });
-        results.push({ id: notification.id, status: "FAILED" });
-      }
-    }
-
-    return sendOk(res, { processed: results.length, results });
+    const result = await processPendingReminders();
+    return sendOk(res, result);
   } catch (error) {
     return sendError(res, 500, "Unexpected error");
   }

@@ -1,6 +1,7 @@
 import { prisma } from "./db/prisma.js";
 import { config } from "./config/env.js";
 import { hashPassword } from "./utils/auth.js";
+import { buildDefaultAvailabilityRules } from "./utils/defaultAvailability.js";
 
 async function main() {
   if (!config.adminEmail || !config.adminPassword) {
@@ -24,15 +25,7 @@ async function main() {
     });
   }
 
-  const weekdays = [1, 2, 3, 4, 5];
-  const rules = weekdays.map((dayOfWeek) => ({
-    userId: user.id,
-    dayOfWeek,
-    startTime: config.defaultWorkStart,
-    endTime: config.defaultWorkEnd,
-    slotMinutes: config.defaultSlotMinutes,
-    isActive: true
-  }));
+  const rules = buildDefaultAvailabilityRules(user.id);
 
   await prisma.availabilityRule.deleteMany({ where: { userId: user.id } });
   await prisma.availabilityRule.createMany({ data: rules });
@@ -47,6 +40,15 @@ async function main() {
       }
     });
   }
+
+  await prisma.systemSetting.upsert({
+    where: { key: "globalAvatarIcon" },
+    update: {},
+    create: {
+      key: "globalAvatarIcon",
+      value: "dot"
+    }
+  });
 
   console.log("Seed completed.");
 }

@@ -6,15 +6,18 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "test": "node --test --experimental-test-isolation=none",
+    "cron:run": "node src/scripts/runRemindersNow.js",
     "prisma:migrate": "npx prisma migrate dev --name init --schema ../../prisma/schema.prisma",
     "prisma:migrate:phase2": "npx prisma migrate dev --name phase2 --schema ../../prisma/schema.prisma",
     "prisma:generate": "npx prisma generate --schema ../../prisma/schema.prisma",
     "seed": "node src/seed.js"
   },
   "dependencies": {
-    "@prisma/client": "^7.8.0",
     "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "bcryptjs": "^2.4.3",
+    "dotenv": "^17.4.2",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.13.1",

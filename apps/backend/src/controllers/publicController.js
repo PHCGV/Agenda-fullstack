@@ -4,17 +4,37 @@ import { sendError, sendOk } from "../utils/http.js";
 import { buildSlots, filterConflicts } from "../utils/availability.js";
 import { filterBlockedSlots, isSlotBlocked } from "../utils/blockedPeriods.js";
 import { addMinutes, toUtcDate } from "../utils/time.js";
-import { buildReminderNotifications } from "../utils/notifications.js";
+import { buildReminderNotifications, buildReminderLinks } from "../utils/notifications.js";
+import { hashPassword } from "../utils/auth.js";
+import crypto from "node:crypto";
+import { sendConfirmationEmail } from "../services/email.js";
 
+/**
+ * Calcula o intervalo UTC completo de um dia para consultas de agenda.
+ *
+ * @param {string} dateString Data no formato YYYY-MM-DD.
+ * @return {{ start: Date, end: Date }} Intervalo inicial e final do dia.
+ */
 function getDayRange(dateString) {
   const start = toUtcDate(dateString, "00:00");
   const end = toUtcDate(dateString, "23:59");
   return { start, end };
 }
 
+/**
+ * Resolve o profissional informado, aceitando apenas usuarios elegiveis para agenda.
+ *
+ * @param {string|undefined} professionalId Identificador opcional do profissional.
+ * @return {Promise<object|null>} Profissional encontrado ou null.
+ */
 async function resolveProfessional(professionalId) {
   if (professionalId) {
-    return prisma.user.findUnique({ where: { id: professionalId } });
+    return prisma.user.findFirst({
+      where: {
+        id: professionalId,
+        role: { in: ["PROFESSIONAL", "ADMIN"] }
+      }
+    });
   }
 
   return prisma.user.findFirst({
@@ -22,6 +42,13 @@ async function resolveProfessional(professionalId) {
   });
 }
 
+/**
+ * Lista os profissionais disponiveis para a area publica de agendamento.
+ *
+ * @param {import("express").Request} req Requisicao HTTP recebida.
+ * @param {import("express").Response} res Resposta HTTP enviada ao cliente.
+ * @return {Promise<void>}
+ */
 export async function listProfessionals(req, res) {
   try {
     const professionals = await prisma.user.findMany({
@@ -35,6 +62,73 @@ export async function listProfessionals(req, res) {
   }
 }
 
+export async function createStaffSignupRequest(req, res) {
+  try {
+    const { name, email, password } = req.body ?? {};
+    if (!name || !email || !password) {
+      return sendError(res, 400, "Name, email, and password are required");
+    }
+
+    if (!email.includes("@")) {
+      return sendError(res, 400, "Invalid email");
+    }
+
+    if (String(password).length < 6) {
+      return sendError(res, 400, "Password must be at least 6 characters");
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const trimmedName = String(name).trim();
+    if (!trimmedName) {
+      return sendError(res, 400, "Name is required");
+    }
+
+    const [existingUser, existingPendingRequest] = await Promise.all([
+      prisma.user.findUnique({ where: { email: normalizedEmail } }),
+      prisma.staffSignupRequest.findFirst({
+        where: {
+          email: normalizedEmail,
+          status: "PENDING"
+        }
+      })
+    ]);
+
+    if (existingUser) {
+      return sendError(res, 409, "Email is already registered");
+    }
+
+    if (existingPendingRequest) {
+      return sendError(res, 409, "There is already a pending request for this email");
+    }
+
+    const request = await prisma.staffSignupRequest.create({
+      data: {
+        name: trimmedName,
+        email: normalizedEmail,
+        passwordHash: await hashPassword(password)
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        status: true,
+        createdAt: true
+      }
+    });
+
+    return sendOk(res, request);
+  } catch (error) {
+    return sendError(res, 500, "Unexpected error");
+  }
+}
+
+/**
+ * Retorna os horarios livres para uma data e profissional especificos.
+ *
+ * @param {import("express").Request} req Requisicao HTTP recebida.
+ * @param {import("express").Response} res Resposta HTTP enviada ao cliente.
+ * @return {Promise<void>}
+ */
 export async function getAvailability(req, res) {
   try {
     const date = req.query.date;
@@ -84,10 +178,14 @@ export async function getAvailability(req, res) {
 
     const blockedPeriods = await prisma.blockedPeriod.findMany({
       where: {
-        OR: [{ userId: professional.id }, { userId: null }],
-        OR: [
-          { isRecurring: false, startAt: { lt: end }, endAt: { gt: start } },
-          { isRecurring: true, dayOfWeek }
+        AND: [
+          { OR: [{ userId: professional.id }, { userId: null }] },
+          {
+            OR: [
+              { isRecurring: false, startAt: { lt: end }, endAt: { gt: start } },
+              { isRecurring: true, dayOfWeek }
+            ]
+          }
         ]
       }
     });
@@ -110,6 +208,13 @@ export async function getAvailability(req, res) {
   }
 }
 
+/**
+ * Cria um novo agendamento publico e agenda os lembretes automaticos.
+ *
+ * @param {import("express").Request} req Requisicao HTTP recebida.
+ * @param {import("express").Response} res Resposta HTTP enviada ao cliente.
+ * @return {Promise<void>}
+ */
 export async function createAppointment(req, res) {
   try {
     const { client, startAt, professionalId, notes, spaceId } = req.body ?? {};
@@ -170,10 +275,14 @@ export async function createAppointment(req, res) {
 
     const blockedPeriods = await prisma.blockedPeriod.findMany({
       where: {
-        OR: [{ userId: professional.id }, { userId: null }],
-        OR: [
-          { isRecurring: false, startAt: { lt: endDate }, endAt: { gt: startDate } },
-          { isRecurring: true, dayOfWeek: startDate.getUTCDay() }
+        AND: [
+          { OR: [{ userId: professional.id }, { userId: null }] },
+          {
+            OR: [
+              { isRecurring: false, startAt: { lt: endDate }, endAt: { gt: startDate } },
+              { isRecurring: true, dayOfWeek: startDate.getUTCDay() }
+            ]
+          }
         ]
       }
     });
@@ -202,6 +311,8 @@ export async function createAppointment(req, res) {
       }
     }
 
+    const confirmationToken = crypto.randomBytes(20).toString("hex");
+
     const appointment = await prisma.$transaction(async (tx) => {
       const savedClient = await tx.client.upsert({
         where: { email: client.email },
@@ -215,6 +326,7 @@ export async function createAppointment(req, res) {
 
       const created = await tx.appointment.create({
         data: {
+          status: "PENDING",
           clientId: savedClient.id,
           professionalId: professional.id,
           startAt: startDate,
@@ -224,7 +336,7 @@ export async function createAppointment(req, res) {
         },
         include: {
           client: { select: { name: true, email: true } },
-          professional: { select: { name: true } }
+          professional: { select: { name: true, email: true } }
         }
       });
 
@@ -239,8 +351,40 @@ export async function createAppointment(req, res) {
         });
       }
 
+      // Create an immediate notification token for confirmation/cancel links
+      await tx.notification.create({
+        data: {
+          appointmentId: created.id,
+          sendAt: new Date(),
+          token: confirmationToken
+        }
+      });
+
       return created;
     });
+
+    // Build confirmation/cancel links and send immediate confirmation emails
+    try {
+      const links = buildReminderLinks(config.publicApiUrl, confirmationToken);
+      await Promise.all([
+        sendConfirmationEmail({
+          appointment,
+          confirmUrl: links.confirmUrl,
+          cancelUrl: links.cancelUrl,
+          to: appointment.client.email,
+          recipientName: appointment.client.name
+        }),
+        sendConfirmationEmail({
+          appointment,
+          confirmUrl: links.confirmUrl,
+          cancelUrl: links.cancelUrl,
+          to: appointment.professional.email,
+          recipientName: appointment.professional.name
+        })
+      ]);
+    } catch (err) {
+      // Do not fail the request if email sending fails
+    }
 
     return sendOk(res, appointment);
   } catch (error) {
