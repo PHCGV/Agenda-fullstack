@@ -66,5 +66,6 @@ export const config = {
   adminEmail: process.env.ADMIN_EMAIL ?? "",
   adminPassword: process.env.ADMIN_PASSWORD ?? "",
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI ?? ""
 };

@@ -313,7 +313,11 @@ export async function updateAvailability(req, res) {
  */
 export async function getGoogleCalendarStatus(req, res) {
   try {
-    const configured = Boolean(config.googleClientId && config.googleRedirectUri);
+    const configured = Boolean(
+      config.googleClientId &&
+      config.googleClientSecret &&
+      config.googleRedirectUri
+    );
     const authUrl = configured
       ? `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
           client_id: config.googleClientId,
@@ -332,11 +336,49 @@ export async function getGoogleCalendarStatus(req, res) {
       scopes: ["calendar.events"],
       message: configured
         ? "OAuth configurado. Falta concluir callback e armazenamento seguro dos tokens."
-        : "Configure GOOGLE_CLIENT_ID e GOOGLE_REDIRECT_URI para iniciar OAuth com Google Calendar."
+        : "Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI para iniciar OAuth com Google Calendar."
     });
   } catch (error) {
     return sendError(res, 500, "Unexpected error");
   }
+}
+
+/**
+ * Recebe o retorno do Google OAuth enquanto a troca de token ainda nao foi implementada.
+ *
+ * @param {import("express").Request} req Requisicao HTTP recebida.
+ * @param {import("express").Response} res Resposta HTTP enviada ao cliente.
+ * @return {void}
+ */
+export function handleGoogleCalendarCallback(req, res) {
+  const hasCode = typeof req.query.code === "string" && req.query.code.length > 0;
+  const title = hasCode ? "Google retornou um codigo OAuth" : "Callback do Google Agenda";
+  const message = hasCode
+    ? "A configuracao basica esta correta. A proxima etapa e trocar este codigo por tokens e salva-los com seguranca."
+    : "Nenhum codigo OAuth foi recebido. Revise o Client ID, redirect URI e permissoes do Google Cloud.";
+
+  res
+    .status(hasCode ? 200 : 400)
+    .type("html")
+    .send(`<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>${title}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 48px; line-height: 1.5; }
+      main { max-width: 720px; }
+      code { background: #f2f2f2; padding: 2px 6px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${title}</h1>
+      <p>${message}</p>
+      <p>Volte ao painel do Consolium para continuar.</p>
+    </main>
+  </body>
+</html>`);
 }
 
 /**

@@ -782,7 +782,7 @@ export default function App() {
                 setAdminTab("spaces");
               }}
             >
-              Espacos
+              Espaços
             </button>
           )}
         </div>

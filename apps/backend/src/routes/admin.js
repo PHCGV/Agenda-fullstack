@@ -8,6 +8,7 @@ import {
   deleteSpace,
   exportAppointmentsToGoogle,
   getGoogleCalendarStatus,
+  handleGoogleCalendarCallback,
   listAvailability,
   listAppointments,
   listBlockedPeriods,
@@ -20,6 +21,8 @@ import {
 } from "../controllers/adminController.js";
 
 const router = express.Router();
+
+router.get("/google-calendar/callback", handleGoogleCalendarCallback);
 
 router.use(requireAuth);
 
