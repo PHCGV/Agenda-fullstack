@@ -803,7 +803,6 @@ export default function App() {
               }}
             >
               Espaços
-              Espaços
             </button>
           )}
         </div>
