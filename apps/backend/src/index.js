@@ -23,6 +23,7 @@ app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", matchedOrigin);
     res.setHeader("Vary", "Origin");
   }
+
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
@@ -33,16 +34,22 @@ app.use((req, res, next) => {
   return next();
 });
 
-app.get("/health", (req, res) => {
-  res.json({ ok: true });
-});
+function sendHealth(res) {
+  return res.json({ ok: true, service: "consolium-backend" });
+}
+
+app.get("/", (_, res) => sendHealth(res));
+app.get("/health", (_, res) => sendHealth(res));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/cron", cronRoutes);
 
+if (!process.env.VERCEL) {
+  app.listen(config.port, () => {
+    console.log(`Consolium API running on port ${config.port}`);
+  });
+}
 
-app.listen(config.port, () => {
-  console.log(`Consolium API running on port ${config.port}`);
-});
+export default app;
