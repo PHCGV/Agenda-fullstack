@@ -9,13 +9,42 @@ async function request(path, options = {}) {
     }
   });
 
-  const data = await response.json().catch(() => ({}));
+  const contentType = response.headers.get("content-type") ?? "";
+
   if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
     const message = data.error ?? "Unexpected error";
     throw new Error(message);
   }
 
-  return data;
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+
+  return response;
+}
+
+async function downloadCsv(path, accessToken, filename) {
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error ?? "Unexpected error");
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function getProfessionals() {
@@ -65,17 +94,94 @@ export function logout(refreshToken) {
   });
 }
 
-export function getAppointments(from, to, accessToken, options = {}) {
+export function getAppointments(filters, accessToken) {
   const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  if (options.includeCanceled) params.set("includeCanceled", "true");
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.professionalId) params.set("professionalId", filters.professionalId);
+  if (filters?.spaceId) params.set("spaceId", filters.spaceId);
+  if (filters?.includeCanceled) params.set("includeCanceled", "true");
+  if (filters?.page) params.set("page", `${filters.page}`);
+  if (filters?.pageSize) params.set("pageSize", `${filters.pageSize}`);
 
   return request(`/api/admin/appointments?${params.toString()}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`
     }
   });
+}
+
+export function exportAppointmentsCsv(filters, accessToken) {
+  const params = new URLSearchParams();
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.professionalId) params.set("professionalId", filters.professionalId);
+  if (filters?.spaceId) params.set("spaceId", filters.spaceId);
+  if (filters?.includeCanceled) params.set("includeCanceled", "true");
+
+  const query = params.toString();
+  return downloadCsv(
+    `/api/admin/appointments/export${query ? `?${query}` : ""}`,
+    accessToken,
+    "appointments.csv"
+  );
+}
+
+export function getDashboardSummary(filters, accessToken) {
+  const params = new URLSearchParams();
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.professionalId) params.set("professionalId", filters.professionalId);
+  if (filters?.spaceId) params.set("spaceId", filters.spaceId);
+
+  return request(`/api/admin/dashboard/summary?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function getDashboardTimeseries(filters, accessToken) {
+  const params = new URLSearchParams();
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.professionalId) params.set("professionalId", filters.professionalId);
+  if (filters?.spaceId) params.set("spaceId", filters.spaceId);
+
+  return request(`/api/admin/dashboard/timeseries?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function getDashboardBreakdown(filters, accessToken) {
+  const params = new URLSearchParams();
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.professionalId) params.set("professionalId", filters.professionalId);
+  if (filters?.spaceId) params.set("spaceId", filters.spaceId);
+
+  return request(`/api/admin/dashboard/breakdown?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function exportDashboardCsv(filters, accessToken) {
+  const params = new URLSearchParams();
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.professionalId) params.set("professionalId", filters.professionalId);
+  if (filters?.spaceId) params.set("spaceId", filters.spaceId);
+
+  const query = params.toString();
+  return downloadCsv(
+    `/api/admin/dashboard/export${query ? `?${query}` : ""}`,
+    accessToken,
+    "dashboard-summary.csv"
+  );
 }
 
 export function getAvailabilityRules(accessToken) {
@@ -202,6 +308,8 @@ export function getNotifications(filters, accessToken) {
   if (filters?.from) params.set("from", filters.from);
   if (filters?.to) params.set("to", filters.to);
   if (filters?.status) params.set("status", filters.status);
+  if (filters?.page) params.set("page", `${filters.page}`);
+  if (filters?.pageSize) params.set("pageSize", `${filters.pageSize}`);
 
   const query = params.toString();
   return request(`/api/admin/notifications${query ? `?${query}` : ""}`, {
@@ -220,9 +328,11 @@ export function cancelNotification(id, accessToken) {
   });
 }
 
-export function getStaffSignupRequests(status, accessToken) {
+export function getStaffSignupRequests(filters, accessToken) {
   const params = new URLSearchParams();
-  if (status) params.set("status", status);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.page) params.set("page", `${filters.page}`);
+  if (filters?.pageSize) params.set("pageSize", `${filters.pageSize}`);
   const query = params.toString();
 
   return request(`/api/admin/staff-signup-requests${query ? `?${query}` : ""}`, {
@@ -232,12 +342,13 @@ export function getStaffSignupRequests(status, accessToken) {
   });
 }
 
-export function approveStaffSignupRequest(id, accessToken) {
+export function approveStaffSignupRequest(id, role, accessToken) {
   return request(`/api/admin/staff-signup-requests/${id}/approve`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${accessToken}`
-    }
+    },
+    body: JSON.stringify({ role })
   });
 }
 
@@ -248,6 +359,31 @@ export function rejectStaffSignupRequest(id, rejectionReason, accessToken) {
       Authorization: `Bearer ${accessToken}`
     },
     body: JSON.stringify({ rejectionReason })
+  });
+}
+
+export function getAuditLogs(filters, accessToken) {
+  const params = new URLSearchParams();
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.action) params.set("action", filters.action);
+  if (filters?.actorId) params.set("actorId", filters.actorId);
+  if (filters?.page) params.set("page", `${filters.page}`);
+  if (filters?.pageSize) params.set("pageSize", `${filters.pageSize}`);
+
+  const query = params.toString();
+  return request(`/api/admin/audit-logs${query ? `?${query}` : ""}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function getAuditActions(accessToken) {
+  return request("/api/admin/audit-actions", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
   });
 }
 

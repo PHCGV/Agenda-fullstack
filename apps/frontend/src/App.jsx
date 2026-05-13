@@ -8,10 +8,17 @@ import {
   createStaffSignupRequest,
   deleteBlockedPeriod,
   deleteSpace,
+  exportAppointmentsCsv,
+  exportDashboardCsv,
+  getAuditActions,
+  getAuditLogs,
   getAppointments,
   getAvailability,
   getAvailabilityRules,
   getBlockedPeriods,
+  getDashboardBreakdown,
+  getDashboardSummary,
+  getDashboardTimeseries,
   getNotifications,
   getProfessionals,
   getStaffSignupRequests,
@@ -72,6 +79,58 @@ const avatarOptions = [
   { key: "grid", symbol: "\u25A6", label: "Grid" },
   { key: "spark", symbol: "\u2726", label: "Spark" }
 ];
+
+function getInitialAdminTab(role) {
+  return role === "PROFESSIONAL" ? "calendar" : "dashboard";
+}
+
+function createPagedState(pageSize) {
+  return {
+    items: [],
+    page: 1,
+    pageSize,
+    total: 0
+  };
+}
+
+function getTotalPages(data) {
+  return Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || 1)));
+}
+
+function formatPercent(value) {
+  return `${Number(value ?? 0).toFixed(1)}%`;
+}
+
+function PaginationControls({ data, onPageChange }) {
+  const totalPages = getTotalPages(data);
+  if (totalPages <= 1) {
+    return null;
+  }
+
+  return (
+    <div className="pagination-row">
+      <button
+        type="button"
+        className="outline-action"
+        disabled={data.page <= 1}
+        onClick={() => onPageChange(data.page - 1)}
+      >
+        Anterior
+      </button>
+      <span>
+        Página {data.page} de {totalPages}
+      </span>
+      <button
+        type="button"
+        className="outline-action"
+        disabled={data.page >= totalPages}
+        onClick={() => onPageChange(data.page + 1)}
+      >
+        Próxima
+      </button>
+    </div>
+  );
+}
 
 
 function loadStoredAuth() {
@@ -167,6 +226,11 @@ function getHourPosition(iso) {
   return date.getHours() + date.getMinutes() / 60;
 }
 
+function getDayEventClassFromDateString(dateString) {
+  const date = new Date(`${dateString}T00:00:00`);
+  return dayEventClass[date.getDay()] ?? "event-monday";
+}
+
 function getAvatarOption(iconKey) {
   return avatarOptions.find((option) => option.key === iconKey) ?? avatarOptions[0];
 }
@@ -209,18 +273,34 @@ export default function App() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [calendarAppointments, setCalendarAppointments] = useState([]);
-  const [listAppointmentsData, setListAppointmentsData] = useState([]);
+  const [listAppointmentsData, setListAppointmentsData] = useState(() => createPagedState(12));
   const [adminMessage, setAdminMessage] = useState("");
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [loadingListAppointments, setLoadingListAppointments] = useState(false);
-  const [adminTab, setAdminTab] = useState("calendar");
+  const [adminTab, setAdminTab] = useState(() =>
+    getInitialAdminTab(loadStoredAuth()?.user?.role)
+  );
   const [calendarMode, setCalendarMode] = useState("week");
   const [calendarDate, setCalendarDate] = useState(today());
   const [showCanceledAppointments, setShowCanceledAppointments] = useState(false);
   const [listFilters, setListFilters] = useState(() => ({
     from: toDateInput(initialDate),
-    to: toDateInput(addDays(initialDate, 120))
+    to: toDateInput(addDays(initialDate, 120)),
+    page: 1
   }));
+  const [dashboardFilters, setDashboardFilters] = useState(() => ({
+    from: toDateInput(addDays(initialDate, -30)),
+    to: toDateInput(addDays(initialDate, 1)),
+    professionalId: "",
+    spaceId: ""
+  }));
+  const [dashboardSummary, setDashboardSummary] = useState(null);
+  const [dashboardSeries, setDashboardSeries] = useState([]);
+  const [dashboardBreakdown, setDashboardBreakdown] = useState({
+    byProfessional: [],
+    bySpace: []
+  });
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [spaces, setSpaces] = useState([]);
   const [spaceForm, setSpaceForm] = useState({
     name: "",
@@ -237,11 +317,12 @@ export default function App() {
     endTime: "",
     reason: ""
   });
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState(() => createPagedState(10));
   const [notificationFilters, setNotificationFilters] = useState(() => ({
     from: "",
     to: "",
-    status: "PENDING"
+    status: "PENDING",
+    page: 1
   }));
   const [availabilityRules, setAvailabilityRules] = useState([]);
   const [availabilityForm, setAvailabilityForm] = useState(() =>
@@ -258,15 +339,39 @@ export default function App() {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [processingNotificationId, setProcessingNotificationId] = useState("");
   const [loadingAvailability, setLoadingAvailability] = useState(false);
-  const [staffRequests, setStaffRequests] = useState([]);
+  const [staffRequests, setStaffRequests] = useState(() => createPagedState(8));
   const [loadingStaffRequests, setLoadingStaffRequests] = useState(false);
   const [processingStaffRequestId, setProcessingStaffRequestId] = useState("");
+  const [staffRequestRoles, setStaffRequestRoles] = useState({});
+  const [auditLogs, setAuditLogs] = useState(() => createPagedState(12));
+  const [auditActions, setAuditActions] = useState([]);
+  const [auditFilters, setAuditFilters] = useState(() => ({
+    from: toDateInput(addDays(initialDate, -30)),
+    to: toDateInput(addDays(initialDate, 1)),
+    action: "",
+    actorId: "",
+    page: 1
+  }));
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
   const [globalAvatarIcon, setGlobalAvatarIcon] = useState("dot");
   const [loadingSystemSettings, setLoadingSystemSettings] = useState(false);
   const [updatingAvatar, setUpdatingAvatar] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
-  const isAdmin = auth?.user?.role === "ADMIN";
-  const panelTitle = isAdmin ? "Administrativo" : "Painel do profissional";
+  const role = auth?.user?.role ?? null;
+  const isAdmin = role === "ADMIN";
+  const isReception = role === "RECEPTION";
+  const isProfessional = role === "PROFESSIONAL";
+  const canManageRequests = isAdmin || isReception;
+  const canReviewRequests = isAdmin;
+  const canManageSpaces = isAdmin || isReception;
+  const canViewAudit = isAdmin || isReception;
+  const canEditAvatar = isAdmin;
+  const canViewSettings = isAdmin || isProfessional;
+  const panelTitle = isAdmin
+    ? "Administrativo"
+    : isReception
+      ? "Painel operacional"
+      : "Painel do profissional";
 
   useEffect(() => {
     getProfessionals()
@@ -354,7 +459,7 @@ export default function App() {
       localStorage.setItem(storageKey, JSON.stringify(payload));
       localStorage.removeItem(legacyStorageKey);
       setAuth(payload);
-      setAdminTab("calendar");
+      setAdminTab(getInitialAdminTab(payload.user.role));
       setView("admin");
     } catch (error) {
       setAdminMessage(error.message);
@@ -369,9 +474,13 @@ export default function App() {
     localStorage.removeItem(legacyStorageKey);
     setAuth(null);
     setCalendarAppointments([]);
-    setListAppointmentsData([]);
-    setNotifications([]);
-    setStaffRequests([]);
+    setListAppointmentsData(createPagedState(12));
+    setNotifications(createPagedState(10));
+    setStaffRequests(createPagedState(8));
+    setAuditLogs(createPagedState(12));
+    setDashboardSummary(null);
+    setDashboardSeries([]);
+    setDashboardBreakdown({ byProfessional: [], bySpace: [] });
     setAvatarPickerOpen(false);
     setView("home");
   }
@@ -402,10 +511,14 @@ export default function App() {
     try {
       const from = calendarRange.start.toISOString();
       const to = calendarRange.end.toISOString();
-      const data = await getAppointments(from, to, auth.accessToken, {
+      const data = await getAppointments({
+        from,
+        to,
+        page: 1,
+        pageSize: 300,
         includeCanceled: showCanceledAppointments
-      });
-      setCalendarAppointments(data);
+      }, auth.accessToken);
+      setCalendarAppointments(data.items ?? []);
     } catch (error) {
       setAdminMessage(error.message);
     } finally {
@@ -424,9 +537,13 @@ export default function App() {
       const to = toDate
         ? new Date(`${listFilters.to}T23:59:59`).toISOString()
         : null;
-      const data = await getAppointments(from, to, auth.accessToken, {
+      const data = await getAppointments({
+        from,
+        to,
+        page: listFilters.page,
+        pageSize: 12,
         includeCanceled: showCanceledAppointments
-      });
+      }, auth.accessToken);
       setListAppointmentsData(data);
     } catch (error) {
       setAdminMessage(error.message);
@@ -470,7 +587,9 @@ export default function App() {
       const filters = {
         ...notificationFilters,
         from: fromDate ? fromDate.toISOString() : "",
-        to: toDate ? new Date(`${notificationFilters.to}T23:59:59`).toISOString() : ""
+        to: toDate ? new Date(`${notificationFilters.to}T23:59:59`).toISOString() : "",
+        page: notificationFilters.page,
+        pageSize: 10
       };
       const data = await getNotifications(filters, auth.accessToken);
       setNotifications(data);
@@ -532,15 +651,75 @@ export default function App() {
   }
 
   async function loadStaffRequests() {
-    if (!auth?.accessToken || !isAdmin) return;
+    if (!auth?.accessToken || !canManageRequests) return;
     setLoadingStaffRequests(true);
     try {
-      const data = await getStaffSignupRequests("", auth.accessToken);
+      const data = await getStaffSignupRequests({ page: staffRequests.page, pageSize: 8 }, auth.accessToken);
       setStaffRequests(data);
     } catch (error) {
       setAdminMessage(error.message);
     } finally {
       setLoadingStaffRequests(false);
+    }
+  }
+
+  async function loadDashboard() {
+    if (!auth?.accessToken) return;
+    setLoadingDashboard(true);
+    try {
+      const fromDate = parseDateInput(dashboardFilters.from);
+      const toDate = parseDateInput(dashboardFilters.to);
+      const filters = {
+        from: fromDate ? fromDate.toISOString() : "",
+        to: toDate ? new Date(`${dashboardFilters.to}T23:59:59`).toISOString() : "",
+        professionalId: dashboardFilters.professionalId || "",
+        spaceId: dashboardFilters.spaceId || ""
+      };
+      const [summary, timeseries, breakdown] = await Promise.all([
+        getDashboardSummary(filters, auth.accessToken),
+        getDashboardTimeseries(filters, auth.accessToken),
+        getDashboardBreakdown(filters, auth.accessToken)
+      ]);
+      setDashboardSummary(summary);
+      setDashboardSeries(timeseries);
+      setDashboardBreakdown(breakdown);
+    } catch (error) {
+      setAdminMessage(error.message);
+    } finally {
+      setLoadingDashboard(false);
+    }
+  }
+
+  async function loadAuditLogs() {
+    if (!auth?.accessToken || !canViewAudit) return;
+    setLoadingAuditLogs(true);
+    try {
+      const fromDate = parseDateInput(auditFilters.from);
+      const toDate = parseDateInput(auditFilters.to);
+      const filters = {
+        from: fromDate ? fromDate.toISOString() : "",
+        to: toDate ? new Date(`${auditFilters.to}T23:59:59`).toISOString() : "",
+        action: auditFilters.action,
+        actorId: auditFilters.actorId,
+        page: auditFilters.page,
+        pageSize: 12
+      };
+      const data = await getAuditLogs(filters, auth.accessToken);
+      setAuditLogs(data);
+    } catch (error) {
+      setAdminMessage(error.message);
+    } finally {
+      setLoadingAuditLogs(false);
+    }
+  }
+
+  async function loadAuditActionOptions() {
+    if (!auth?.accessToken || !canViewAudit) return;
+    try {
+      const data = await getAuditActions(auth.accessToken);
+      setAuditActions(data);
+    } catch (error) {
+      setAdminMessage(error.message);
     }
   }
 
@@ -674,8 +853,9 @@ export default function App() {
     if (!auth?.accessToken) return;
     setProcessingStaffRequestId(id);
     try {
-      await approveStaffSignupRequest(id, auth.accessToken);
-      setAdminMessage("Solicitação aprovada e profissional criado.");
+      const roleToAssign = staffRequestRoles[id] ?? "PROFESSIONAL";
+      await approveStaffSignupRequest(id, roleToAssign, auth.accessToken);
+      setAdminMessage("Solicitação aprovada e membro criado.");
       await Promise.all([loadStaffRequests(), getProfessionals().then(setProfessionals)]);
     } catch (error) {
       setAdminMessage(error.message);
@@ -700,7 +880,7 @@ export default function App() {
   }
 
   async function handleAvatarChange(icon) {
-    if (!auth?.accessToken || !isAdmin) return;
+    if (!auth?.accessToken || !canEditAvatar) return;
     setUpdatingAvatar(true);
     try {
       const data = await updateGlobalAvatar(icon, auth.accessToken);
@@ -711,6 +891,43 @@ export default function App() {
       setAdminMessage(error.message);
     } finally {
       setUpdatingAvatar(false);
+    }
+  }
+
+  async function handleDashboardExport() {
+    if (!auth?.accessToken) return;
+    try {
+      const fromDate = parseDateInput(dashboardFilters.from);
+      const toDate = parseDateInput(dashboardFilters.to);
+      await exportDashboardCsv(
+        {
+          from: fromDate ? fromDate.toISOString() : "",
+          to: toDate ? new Date(`${dashboardFilters.to}T23:59:59`).toISOString() : "",
+          professionalId: dashboardFilters.professionalId || "",
+          spaceId: dashboardFilters.spaceId || ""
+        },
+        auth.accessToken
+      );
+    } catch (error) {
+      setAdminMessage(error.message);
+    }
+  }
+
+  async function handleAppointmentsExport() {
+    if (!auth?.accessToken) return;
+    try {
+      const fromDate = parseDateInput(listFilters.from);
+      const toDate = parseDateInput(listFilters.to);
+      await exportAppointmentsCsv(
+        {
+          from: fromDate ? fromDate.toISOString() : "",
+          to: toDate ? new Date(`${listFilters.to}T23:59:59`).toISOString() : "",
+          includeCanceled: showCanceledAppointments
+        },
+        auth.accessToken
+      );
+    } catch (error) {
+      setAdminMessage(error.message);
     }
   }
 
@@ -731,25 +948,75 @@ export default function App() {
     if (auth?.accessToken && view === "admin") {
       loadListAppointments();
     }
-  }, [auth, view, listFilters.from, listFilters.to, showCanceledAppointments]);
+  }, [auth, view, listFilters.from, listFilters.to, listFilters.page, showCanceledAppointments]);
 
   useEffect(() => {
     if (auth?.accessToken && view === "admin") {
       loadNotifications();
     }
-  }, [auth, view, notificationFilters.from, notificationFilters.to, notificationFilters.status]);
+  }, [
+    auth,
+    view,
+    notificationFilters.from,
+    notificationFilters.to,
+    notificationFilters.status,
+    notificationFilters.page
+  ]);
+
+  useEffect(() => {
+    if (auth?.accessToken && view === "admin" && adminTab === "requests") {
+      loadStaffRequests();
+    }
+  }, [auth, view, adminTab, staffRequests.page]);
+
+  useEffect(() => {
+    if (auth?.accessToken && view === "admin" && adminTab === "dashboard") {
+      loadDashboard();
+    }
+  }, [
+    auth,
+    view,
+    adminTab,
+    dashboardFilters.from,
+    dashboardFilters.to,
+    dashboardFilters.professionalId,
+    dashboardFilters.spaceId
+  ]);
+
+  useEffect(() => {
+    if (auth?.accessToken && view === "admin" && adminTab === "history") {
+      loadAuditLogs();
+    }
+  }, [
+    auth,
+    view,
+    adminTab,
+    auditFilters.from,
+    auditFilters.to,
+    auditFilters.action,
+    auditFilters.actorId,
+    auditFilters.page
+  ]);
 
   useEffect(() => {
     if (!auth?.accessToken || view !== "admin") return;
-    if (!isAdmin && (adminTab === "spaces" || adminTab === "requests")) {
-      setAdminTab("calendar");
+    const forbiddenTabs = [
+      !canManageSpaces ? "spaces" : null,
+      !canManageRequests ? "requests" : null,
+      !canViewSettings ? "settings" : null,
+      !canViewAudit ? "history" : null
+    ].filter(Boolean);
+    if (forbiddenTabs.includes(adminTab)) {
+      setAdminTab(getInitialAdminTab(role));
       return;
     }
     if (adminTab === "spaces") loadSpaces();
     if (adminTab === "blocked") loadBlockedPeriods();
     if (adminTab === "settings") loadAvailabilityRules();
-    if (adminTab === "requests") loadStaffRequests();
-  }, [adminTab, auth, view, isAdmin]);
+    if (adminTab === "history") {
+      loadAuditActionOptions();
+    }
+  }, [adminTab, auth, view, canManageRequests, canManageSpaces, canViewAudit, canViewSettings, role]);
 
   useEffect(() => {
     if (auth?.accessToken) {
@@ -780,12 +1047,14 @@ export default function App() {
   }, [calendarAppointments, calendarRange]);
 
   const activeSpaces = spaces.filter((space) => space.isActive).length;
-  const pendingNotifications = notifications.filter(
-    (notification) => notification.status === "PENDING"
-  ).length;
-  const pendingStaffRequests = staffRequests.filter((request) => request.status === "PENDING").length;
+  const pendingNotifications =
+    dashboardSummary?.pendingNotifications ??
+    notifications.items.filter((notification) => notification.status === "PENDING").length;
+  const pendingStaffRequests =
+    dashboardSummary?.pendingStaffRequests ??
+    staffRequests.items.filter((request) => request.status === "PENDING").length;
   const summaryAppointments =
-    adminTab === "appointments" ? listAppointmentsData.length : visibleAppointments.length;
+    adminTab === "appointments" ? listAppointmentsData.total : visibleAppointments.length;
 
   if (view === "home") {
     return (
@@ -926,7 +1195,7 @@ export default function App() {
           >
             Agendamento
           </button>
-          {isAdmin && (
+          {canManageSpaces && (
             <button
               type="button"
               className={adminTab === "spaces" ? "active" : ""}
@@ -952,26 +1221,33 @@ export default function App() {
         <div className="nav-right">
           <button
             type="button"
-            className={view === "admin" && adminTab === "calendar" ? "active" : ""}
+            className={
+              view === "admin" &&
+              (adminTab === "dashboard" || adminTab === "calendar")
+                ? "active"
+                : ""
+            }
             onClick={() => {
               setView(auth ? "admin" : "login");
-              setAdminTab("calendar");
+              setAdminTab(getInitialAdminTab(role));
             }}
           >
             {panelTitle}
           </button>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={() => {
-              setView(auth ? "admin" : "login");
-              setAdminTab("settings");
-            }}
-            aria-label="Configurações"
-            title="Configurações"
-          >
-            {"\u2699"}
-          </button>
+          {canViewSettings && (
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => {
+                setView(auth ? "admin" : "login");
+                setAdminTab("settings");
+              }}
+              aria-label="Configurações"
+              title="Configurações"
+            >
+              {"\u2699"}
+            </button>
+          )}
           <button
             type="button"
             className="avatar-button"
@@ -982,7 +1258,7 @@ export default function App() {
               }
 
               setView("admin");
-              if (isAdmin) {
+              if (canEditAvatar) {
                 setAvatarPickerOpen((current) => !current);
               }
             }}
@@ -991,13 +1267,13 @@ export default function App() {
           >
             <AvatarGlyph iconKey={globalAvatarIcon} />
           </button>
-          {auth && isAdmin && avatarPickerOpen && (
-            <div className="avatar-picker" role="dialog" aria-label="Selecionar icone global">
-              <strong>Icone global</strong>
+          {auth && canEditAvatar && avatarPickerOpen && (
+            <div className="avatar-picker" role="dialog" aria-label="Selecionar ícone global">
+              <strong>Ícone global</strong>
               <span>
                 {loadingSystemSettings
                   ? "Carregando..."
-                  : "Escolha o icone exibido no perfil do sistema."}
+                  : "Escolha o ícone exibido no perfil do sistema."}
               </span>
               <div className="avatar-picker-grid">
                 {avatarOptions.map((option) => (
@@ -1155,6 +1431,13 @@ export default function App() {
             <div className="admin-tabs">
               <button
                 type="button"
+                className={adminTab === "dashboard" ? "active" : ""}
+                onClick={() => setAdminTab("dashboard")}
+              >
+                Dashboard
+              </button>
+              <button
+                type="button"
                 className={adminTab === "calendar" ? "active" : ""}
                 onClick={() => setAdminTab("calendar")}
               >
@@ -1167,7 +1450,7 @@ export default function App() {
               >
                 Lista
               </button>
-              {isAdmin && (
+              {canManageRequests && (
                 <button
                   type="button"
                   className={adminTab === "requests" ? "active" : ""}
@@ -1176,7 +1459,7 @@ export default function App() {
                   Solicitações
                 </button>
               )}
-              {isAdmin && (
+              {canManageSpaces && (
                 <button
                   type="button"
                   className={adminTab === "spaces" ? "active" : ""}
@@ -1199,13 +1482,24 @@ export default function App() {
               >
                 Notificações
               </button>
-              <button
-                type="button"
-                className={adminTab === "settings" ? "active" : ""}
-                onClick={() => setAdminTab("settings")}
-              >
-                Configurações
-              </button>
+              {canViewSettings && (
+                <button
+                  type="button"
+                  className={adminTab === "settings" ? "active" : ""}
+                  onClick={() => setAdminTab("settings")}
+                >
+                  Configurações
+                </button>
+              )}
+              {canViewAudit && (
+                <button
+                  type="button"
+                  className={adminTab === "history" ? "active" : ""}
+                  onClick={() => setAdminTab("history")}
+                >
+                  Histórico
+                </button>
+              )}
               <button
                 type="button"
                 className={adminTab === "google" ? "active" : ""}
@@ -1228,13 +1522,230 @@ export default function App() {
                 <strong>{pendingNotifications}</strong>
                 <span>Notificações pendentes</span>
               </div>
-              {isAdmin && (
+              {canManageRequests && (
                 <div>
                   <strong>{pendingStaffRequests}</strong>
                   <span>Solicitações pendentes</span>
                 </div>
               )}
             </div>
+
+                {adminTab === "dashboard" && (
+                  <section className="dashboard-shell">
+                    <form
+                      className="inline-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        loadDashboard();
+                      }}
+                    >
+                      <input
+                        type="date"
+                        value={dashboardFilters.from}
+                        onChange={(event) =>
+                          setDashboardFilters((prev) => ({
+                            ...prev,
+                            from: event.target.value
+                          }))
+                        }
+                      />
+                      <input
+                        type="date"
+                        value={dashboardFilters.to}
+                        onChange={(event) =>
+                          setDashboardFilters((prev) => ({
+                            ...prev,
+                            to: event.target.value
+                          }))
+                        }
+                      />
+                      {!isProfessional && (
+                        <>
+                          <select
+                            value={dashboardFilters.professionalId}
+                            onChange={(event) =>
+                              setDashboardFilters((prev) => ({
+                                ...prev,
+                                professionalId: event.target.value
+                              }))
+                            }
+                          >
+                            <option value="">Todos os profissionais</option>
+                            {professionals.map((prof) => (
+                              <option key={prof.id} value={prof.id}>
+                                {prof.name}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={dashboardFilters.spaceId}
+                            onChange={(event) =>
+                              setDashboardFilters((prev) => ({
+                                ...prev,
+                                spaceId: event.target.value
+                              }))
+                            }
+                          >
+                            <option value="">Todos os espaços</option>
+                            {spaces
+                              .filter((space) => space.isActive)
+                              .map((space) => (
+                                <option key={space.id} value={space.id}>
+                                  {space.name}
+                                </option>
+                              ))}
+                          </select>
+                        </>
+                      )}
+                      <button className="outline-action" type="submit">
+                        Atualizar dashboard
+                      </button>
+                      <button
+                        className="outline-action"
+                        type="button"
+                        onClick={handleDashboardExport}
+                      >
+                        Exportar CSV
+                      </button>
+                    </form>
+
+                    {loadingDashboard ? (
+                      <span className="notice">Carregando dashboard...</span>
+                    ) : dashboardSummary ? (
+                      <>
+                        <div className="dashboard-kpis">
+                          <article className="metric-card metric-card--blue">
+                            <strong>{dashboardSummary.totalAppointments}</strong>
+                            <span>Total no período</span>
+                          </article>
+                          <article className="metric-card metric-card--amber">
+                            <strong>{dashboardSummary.pendingAppointments}</strong>
+                            <span>Pendentes</span>
+                          </article>
+                          <article className="metric-card metric-card--green">
+                            <strong>{dashboardSummary.confirmedAppointments}</strong>
+                            <span>Confirmados</span>
+                          </article>
+                          <article className="metric-card metric-card--slate">
+                            <strong>{dashboardSummary.completedAppointments}</strong>
+                            <span>Concluídos</span>
+                          </article>
+                          <article className="metric-card metric-card--teal">
+                            <strong>{formatPercent(dashboardSummary.confirmationRate)}</strong>
+                            <span>Taxa de confirmação</span>
+                          </article>
+                          <article className="metric-card metric-card--red">
+                            <strong>{formatPercent(dashboardSummary.cancellationRate)}</strong>
+                            <span>Taxa de cancelamento</span>
+                          </article>
+                        </div>
+
+                        <div className="dashboard-grid">
+                          <section className="record-card dashboard-panel dashboard-panel--blue">
+                            <div className="record-head">
+                              <div>
+                                <h3>Série por dia</h3>
+                                <span>Movimento diário do período filtrado</span>
+                              </div>
+                            </div>
+                            {dashboardSeries.length ? (
+                              <div className="series-list">
+                                {dashboardSeries.map((point) => (
+                                  <div
+                                    className={`series-row ${getDayEventClassFromDateString(
+                                      point.date
+                                    )}`}
+                                    key={point.date}
+                                  >
+                                    <span>{point.date}</span>
+                                    <strong>{point.total}</strong>
+                                    <small>
+                                      Pendentes {point.pending} · Confirmados {point.confirmed} ·
+                                      Cancelados {point.canceled}
+                                    </small>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="notice">Sem dados no período.</span>
+                            )}
+                          </section>
+
+                          <section className="record-card dashboard-panel dashboard-panel--amber">
+                            <div className="record-head">
+                              <div>
+                                <h3>Pendências operacionais</h3>
+                                <span>Itens que exigem atenção rápida</span>
+                              </div>
+                            </div>
+                            <div className="mini-stats">
+                              <div>
+                                <strong>{dashboardSummary.pendingOperations}</strong>
+                                <span>Total de pendências</span>
+                              </div>
+                              <div>
+                                <strong>{dashboardSummary.pendingNotifications}</strong>
+                                <span>Notificações pendentes</span>
+                              </div>
+                              <div>
+                                <strong>{dashboardSummary.pendingStaffRequests}</strong>
+                                <span>Solicitações pendentes</span>
+                              </div>
+                            </div>
+                          </section>
+
+                          <section className="record-card dashboard-panel dashboard-panel--green">
+                            <div className="record-head">
+                              <div>
+                                <h3>Volume por profissional</h3>
+                                <span>Ranking operacional</span>
+                              </div>
+                            </div>
+                            {dashboardBreakdown.byProfessional.length ? (
+                              <div className="series-list">
+                                {dashboardBreakdown.byProfessional.map((item) => (
+                                  <div className="series-row" key={item.professionalId ?? item.name}>
+                                    <span>{item.name}</span>
+                                    <strong>{item.total}</strong>
+                                    <small>
+                                      Pendentes {item.pending} · Confirmados {item.confirmed} ·
+                                      Cancelados {item.canceled}
+                                    </small>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="notice">Sem profissionais no período.</span>
+                            )}
+                          </section>
+
+                          <section className="record-card dashboard-panel dashboard-panel--red">
+                            <div className="record-head">
+                              <div>
+                                <h3>Ocupação por espaço</h3>
+                                <span>Distribuição dos atendimentos</span>
+                              </div>
+                            </div>
+                            {dashboardBreakdown.bySpace.length ? (
+                              <div className="series-list">
+                                {dashboardBreakdown.bySpace.map((item) => (
+                                  <div className="series-row" key={item.spaceId ?? item.name}>
+                                    <span>{item.name}</span>
+                                    <strong>{item.total}</strong>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="notice">Sem espaços no período.</span>
+                            )}
+                          </section>
+                        </div>
+                      </>
+                    ) : (
+                      <span className="notice">Sem dados para o dashboard.</span>
+                    )}
+                  </section>
+                )}
 
                 {adminTab === "calendar" && (
                   <section className="calendar-shell">
@@ -1252,7 +1763,7 @@ export default function App() {
                             year: "numeric"
                           })}
                         </strong>
-                        <span>{visibleAppointments.length} compromissos no periodo</span>
+                        <span>{visibleAppointments.length} compromissos no período</span>
                       </div>
                       <div className="calendar-actions">
                         <button
@@ -1362,35 +1873,52 @@ export default function App() {
                         type="date"
                         value={listFilters.from}
                         onChange={(event) =>
-                          setListFilters((prev) => ({ ...prev, from: event.target.value }))
+                          setListFilters((prev) => ({
+                            ...prev,
+                            from: event.target.value,
+                            page: 1
+                          }))
                         }
                       />
                       <input
                         type="date"
                         value={listFilters.to}
                         onChange={(event) =>
-                          setListFilters((prev) => ({ ...prev, to: event.target.value }))
+                          setListFilters((prev) => ({
+                            ...prev,
+                            to: event.target.value,
+                            page: 1
+                          }))
                         }
                       />
                       <label className="toggle-row toggle-row--compact">
                         <input
                           type="checkbox"
                           checked={showCanceledAppointments}
-                          onChange={(event) =>
-                            setShowCanceledAppointments(event.target.checked)
-                          }
+                          onChange={(event) => {
+                            setShowCanceledAppointments(event.target.checked);
+                            setListFilters((prev) => ({ ...prev, page: 1 }));
+                          }}
                         />
-                        Exibir cancelados
-                      </label>
+                      Exibir cancelados
+                    </label>
+                      <button
+                        className="outline-action"
+                        type="button"
+                        onClick={handleAppointmentsExport}
+                      >
+                        Exportar CSV
+                      </button>
                       <button className="outline-action" type="submit">
-                        Filtrar periodo
+                        Filtrar período
                       </button>
                     </form>
                     {loadingListAppointments ? (
                       <span className="notice">Carregando atendimentos...</span>
-                    ) : listAppointmentsData.length ? (
+                    ) : listAppointmentsData.items.length ? (
+                      <>
                       <div className="record-grid">
-                        {listAppointmentsData.map((appointment) => (
+                        {listAppointmentsData.items.map((appointment) => (
                           <article className="record-card" key={appointment.id}>
                             <div className="record-head">
                               <div>
@@ -1451,19 +1979,27 @@ export default function App() {
                           </article>
                         ))}
                       </div>
+                      <PaginationControls
+                        data={listAppointmentsData}
+                        onPageChange={(page) =>
+                          setListFilters((prev) => ({ ...prev, page }))
+                        }
+                      />
+                      </>
                     ) : (
-                      <span className="notice">Sem atendimentos no periodo.</span>
+                      <span className="notice">Sem atendimentos no período.</span>
                     )}
                   </>
                 )}
 
-                {isAdmin && adminTab === "requests" && (
+                {canManageRequests && adminTab === "requests" && (
                   <>
                     {loadingStaffRequests ? (
                       <span className="notice">Carregando solicitações...</span>
-                    ) : staffRequests.length ? (
+                    ) : staffRequests.items.length ? (
+                      <>
                       <div className="record-grid">
-                        {staffRequests.map((request) => (
+                        {staffRequests.items.map((request) => (
                           <article className="record-card" key={request.id}>
                             <div className="record-head">
                               <div>
@@ -1476,13 +2012,31 @@ export default function App() {
                             </div>
                             <span>Solicitado em: {formatDate(request.createdAt)}</span>
                             <span>
-                              Revisao: {request.reviewedBy?.name ?? "Aguardando admin"}
+                              Revisão: {request.reviewedBy?.name ?? "Aguardando admin"}
                             </span>
                             <span>
-                              Motivo: {request.rejectionReason ?? "Sem observacao"}
+                              Motivo: {request.rejectionReason ?? "Sem observação"}
                             </span>
                             {request.status === "PENDING" && (
                               <div className="card-actions">
+                                {canReviewRequests && (
+                                  <label>
+                                    Papel
+                                    <select
+                                      value={staffRequestRoles[request.id] ?? "PROFESSIONAL"}
+                                      onChange={(event) =>
+                                        setStaffRequestRoles((prev) => ({
+                                          ...prev,
+                                          [request.id]: event.target.value
+                                        }))
+                                      }
+                                    >
+                                      <option value="PROFESSIONAL">Profissional</option>
+                                      <option value="RECEPTION">Recepção</option>
+                                    </select>
+                                  </label>
+                                )}
+                                {canReviewRequests ? (
                                 <button
                                   className="solid-action"
                                   type="button"
@@ -1493,6 +2047,10 @@ export default function App() {
                                     ? "Processando..."
                                     : "Aprovar"}
                                 </button>
+                                ) : (
+                                  <span className="notice">Aguardando aprovação do admin.</span>
+                                )}
+                                {canReviewRequests && (
                                 <button
                                   className="outline-action"
                                   type="button"
@@ -1501,18 +2059,26 @@ export default function App() {
                                 >
                                   Rejeitar
                                 </button>
+                                )}
                               </div>
                             )}
                           </article>
                         ))}
                       </div>
+                      <PaginationControls
+                        data={staffRequests}
+                        onPageChange={(page) =>
+                          setStaffRequests((prev) => ({ ...prev, page }))
+                        }
+                      />
+                      </>
                     ) : (
                       <span className="notice">Sem solicitações cadastradas.</span>
                     )}
                   </>
                 )}
 
-                {isAdmin && adminTab === "spaces" && (
+                {canManageSpaces && adminTab === "spaces" && (
                   <>
                     <form className="inline-form" onSubmit={handleSpaceCreate}>
                       <input
@@ -1714,7 +2280,8 @@ export default function App() {
                         onChange={(event) =>
                           setNotificationFilters((prev) => ({
                             ...prev,
-                            from: event.target.value
+                            from: event.target.value,
+                            page: 1
                           }))
                         }
                       />
@@ -1724,7 +2291,8 @@ export default function App() {
                         onChange={(event) =>
                           setNotificationFilters((prev) => ({
                             ...prev,
-                            to: event.target.value
+                            to: event.target.value,
+                            page: 1
                           }))
                         }
                       />
@@ -1733,7 +2301,8 @@ export default function App() {
                         onChange={(event) =>
                           setNotificationFilters((prev) => ({
                             ...prev,
-                            status: event.target.value
+                            status: event.target.value,
+                            page: 1
                           }))
                         }
                       >
@@ -1749,9 +2318,10 @@ export default function App() {
                     </form>
                     {loadingNotifications ? (
                       <span className="notice">Carregando notificações...</span>
-                    ) : notifications.length ? (
+                    ) : notifications.items.length ? (
+                      <>
                       <div className="record-grid">
-                        {notifications.map((notification) => (
+                        {notifications.items.map((notification) => (
                           <article className="record-card" key={notification.id}>
                             <h3>{notification.appointment.client.name}</h3>
                             <span>Começa em: {formatDate(notification.appointment.startAt)}</span>
@@ -1776,8 +2346,101 @@ export default function App() {
                           </article>
                         ))}
                       </div>
+                      <PaginationControls
+                        data={notifications}
+                        onPageChange={(page) =>
+                          setNotificationFilters((prev) => ({ ...prev, page }))
+                        }
+                      />
+                      </>
                     ) : (
                       <span className="notice">Sem notificações.</span>
+                    )}
+                  </>
+                )}
+
+                {canViewAudit && adminTab === "history" && (
+                  <>
+                    <form
+                      className="inline-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        loadAuditLogs();
+                      }}
+                    >
+                      <input
+                        type="date"
+                        value={auditFilters.from}
+                        onChange={(event) =>
+                          setAuditFilters((prev) => ({
+                            ...prev,
+                            from: event.target.value,
+                            page: 1
+                          }))
+                        }
+                      />
+                      <input
+                        type="date"
+                        value={auditFilters.to}
+                        onChange={(event) =>
+                          setAuditFilters((prev) => ({
+                            ...prev,
+                            to: event.target.value,
+                            page: 1
+                          }))
+                        }
+                      />
+                      <select
+                        value={auditFilters.action}
+                        onChange={(event) =>
+                          setAuditFilters((prev) => ({
+                            ...prev,
+                            action: event.target.value,
+                            page: 1
+                          }))
+                        }
+                      >
+                        <option value="">Todas as ações</option>
+                        {auditActions.map((action) => (
+                          <option key={action.value} value={action.value}>
+                            {action.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="outline-action" type="submit">
+                        Filtrar histórico
+                      </button>
+                    </form>
+                    {loadingAuditLogs ? (
+                      <span className="notice">Carregando histórico...</span>
+                    ) : auditLogs.items.length ? (
+                      <>
+                        <div className="record-grid">
+                          {auditLogs.items.map((log) => (
+                            <article className="record-card" key={log.id}>
+                              <div className="record-head">
+                                <div>
+                                  <h3>{log.summary}</h3>
+                                  <span>{formatDate(log.createdAt)}</span>
+                                </div>
+                                <span className="status completed">{log.action}</span>
+                              </div>
+                              <span>Ator: {log.actor?.name ?? "Sistema / área pública"}</span>
+                              <span>Perfil: {log.actorRole ?? "N/A"}</span>
+                              <span>Entidade: {log.entityType}</span>
+                              <span>Código: {log.entityId ?? "-"}</span>
+                            </article>
+                          ))}
+                        </div>
+                        <PaginationControls
+                          data={auditLogs}
+                          onPageChange={(page) =>
+                            setAuditFilters((prev) => ({ ...prev, page }))
+                          }
+                        />
+                      </>
+                    ) : (
+                      <span className="notice">Sem registros no histórico.</span>
                     )}
                   </>
                 )}

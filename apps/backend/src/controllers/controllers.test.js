@@ -4,6 +4,7 @@ import { prisma } from "../db/prisma.js";
 import { config } from "../config/env.js";
 import {
   approveStaffSignupRequest,
+  listDashboardSummary,
   listAppointments
 } from "./adminController.js";
 import { createStaffSignupRequest } from "./publicController.js";
@@ -69,6 +70,7 @@ test("listAppointments hides canceled appointments by default", async () => {
           }
         ];
       });
+      patch(prisma.appointment, "count", async () => 1);
     },
     async () => {
       const req = {
@@ -83,13 +85,13 @@ test("listAppointments hides canceled appointments by default", async () => {
       await listAppointments(req, res);
 
       assert.equal(res.statusCode, 200);
-      assert.equal(res.body.length, 1);
+      assert.equal(res.body.items.length, 1);
       assert.match(
-        res.body[0].googleCalendarUrl,
+        res.body.items[0].googleCalendarUrl,
         /^https:\/\/calendar\.google\.com\/calendar\/render\?/
       );
-      assert.match(res.body[0].googleCalendarUrl, /action=TEMPLATE/);
-      assert.match(res.body[0].googleCalendarUrl, /Sala\+1|Sala%201/);
+      assert.match(res.body.items[0].googleCalendarUrl, /action=TEMPLATE/);
+      assert.match(res.body.items[0].googleCalendarUrl, /Sala\+1|Sala%201/);
       assert.deepEqual(receivedWhere.status, { not: "CANCELED" });
     }
   );
@@ -104,6 +106,7 @@ test("listAppointments includes canceled appointments only when explicitly reque
         receivedWhere = where;
         return [];
       });
+      patch(prisma.appointment, "count", async () => 0);
     },
     async () => {
       const req = {
@@ -119,6 +122,7 @@ test("listAppointments includes canceled appointments only when explicitly reque
       await listAppointments(req, res);
 
       assert.equal(res.statusCode, 200);
+      assert.equal(res.body.total, 0);
       assert.equal("status" in receivedWhere, false);
     }
   );
@@ -230,6 +234,9 @@ test("approveStaffSignupRequest creates a professional and default availability 
               reviewedPayload = data;
               return updatedRequest;
             }
+          },
+          auditLog: {
+            create: async () => ({ id: "audit-1" })
           }
         };
 
@@ -239,6 +246,7 @@ test("approveStaffSignupRequest creates a professional and default availability 
     async () => {
       const req = {
         params: { id: "signup-1" },
+        body: { role: "PROFESSIONAL" },
         user: { id: "admin-1", role: "ADMIN" }
       };
       const res = createResponseDouble();
@@ -266,6 +274,128 @@ test("approveStaffSignupRequest creates a professional and default availability 
       assert.equal(reviewedPayload.status, "APPROVED");
       assert.equal(reviewedPayload.reviewedById, "admin-1");
       assert.deepEqual(res.body, updatedRequest);
+    }
+  );
+});
+
+test("approveStaffSignupRequest can create a reception user without default availability", async () => {
+  let createdUserPayload;
+  let createManyCalled = false;
+
+  await withPatchedPrisma(
+    (patch) => {
+      patch(prisma.staffSignupRequest, "findUnique", async () => ({
+        id: "signup-2",
+        name: "Recepcao Nova",
+        email: "recepcao@example.com",
+        passwordHash: "hash",
+        status: "PENDING"
+      }));
+      patch(prisma.user, "findUnique", async () => null);
+      patch(prisma, "$transaction", async (callback) => {
+        const tx = {
+          user: {
+            create: async ({ data }) => {
+              createdUserPayload = data;
+              return { id: "reception-1", ...data };
+            }
+          },
+          availabilityRule: {
+            createMany: async () => {
+              createManyCalled = true;
+              return { count: 0 };
+            }
+          },
+          staffSignupRequest: {
+            update: async () => ({
+              id: "signup-2",
+              name: "Recepcao Nova",
+              email: "recepcao@example.com",
+              status: "APPROVED"
+            })
+          },
+          auditLog: {
+            create: async () => ({ id: "audit-1" })
+          }
+        };
+
+        return callback(tx);
+      });
+    },
+    async () => {
+      const req = {
+        params: { id: "signup-2" },
+        body: { role: "RECEPTION" },
+        user: { id: "admin-1", role: "ADMIN" }
+      };
+      const res = createResponseDouble();
+
+      await approveStaffSignupRequest(req, res);
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(createdUserPayload.role, "RECEPTION");
+      assert.equal(createManyCalled, false);
+    }
+  );
+});
+
+test("listDashboardSummary returns scoped operational metrics", async () => {
+  await withPatchedPrisma(
+    (patch) => {
+      patch(prisma.appointment, "findMany", async () => [
+        {
+          id: "a1",
+          status: "PENDING",
+          startAt: new Date("2026-05-10T12:00:00.000Z"),
+          endAt: new Date("2026-05-10T13:00:00.000Z"),
+          professionalId: "professional-1",
+          professional: { id: "professional-1", name: "Profissional 1" },
+          spaceId: "space-1",
+          space: { id: "space-1", name: "Sala 1" }
+        },
+        {
+          id: "a2",
+          status: "CONFIRMED",
+          startAt: new Date("2026-05-10T14:00:00.000Z"),
+          endAt: new Date("2026-05-10T15:00:00.000Z"),
+          professionalId: "professional-1",
+          professional: { id: "professional-1", name: "Profissional 1" },
+          spaceId: null,
+          space: null
+        },
+        {
+          id: "a3",
+          status: "CANCELED",
+          startAt: new Date("2026-05-11T14:00:00.000Z"),
+          endAt: new Date("2026-05-11T15:00:00.000Z"),
+          professionalId: "professional-1",
+          professional: { id: "professional-1", name: "Profissional 1" },
+          spaceId: "space-1",
+          space: { id: "space-1", name: "Sala 1" }
+        }
+      ]);
+      patch(prisma.notification, "count", async () => 2);
+      patch(prisma.staffSignupRequest, "count", async () => 1);
+    },
+    async () => {
+      const req = {
+        query: {
+          from: "2026-05-01T00:00:00.000Z",
+          to: "2026-05-31T23:59:59.000Z"
+        },
+        user: { id: "admin-1", role: "ADMIN" }
+      };
+      const res = createResponseDouble();
+
+      await listDashboardSummary(req, res);
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.body.totalAppointments, 3);
+      assert.equal(res.body.pendingAppointments, 1);
+      assert.equal(res.body.confirmedAppointments, 1);
+      assert.equal(res.body.canceledAppointments, 1);
+      assert.equal(res.body.pendingNotifications, 2);
+      assert.equal(res.body.pendingStaffRequests, 1);
     }
   );
 });

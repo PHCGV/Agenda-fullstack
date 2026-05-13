@@ -8,6 +8,7 @@ import { buildReminderNotifications, buildReminderLinks } from "../utils/notific
 import { hashPassword } from "../utils/auth.js";
 import crypto from "node:crypto";
 import { sendConfirmationEmail } from "../services/email.js";
+import { writeAuditLog } from "../utils/audit.js";
 
 /**
  * Calcula o intervalo UTC completo de um dia para consultas de agenda.
@@ -360,6 +361,18 @@ export async function createAppointment(req, res) {
         }
       });
 
+      await writeAuditLog(tx, null, {
+        action: "APPOINTMENT_CREATED",
+        entityType: "Appointment",
+        entityId: created.id,
+        summary: "Novo agendamento criado pela área pública.",
+        metadata: {
+          professionalId: created.professionalId,
+          clientEmail: created.client.email,
+          status: created.status
+        }
+      });
+
       return created;
     });
 
@@ -412,6 +425,18 @@ export async function confirmNotification(req, res) {
       }
     });
 
+    await writeAuditLog(prisma, null, {
+      action: "APPOINTMENT_STATUS_UPDATED",
+      entityType: "Appointment",
+      entityId: updated.id,
+      summary: "Agendamento confirmado por link público.",
+      metadata: {
+        previousStatus: notification.appointment.status,
+        nextStatus: updated.status,
+        source: "public-confirmation-link"
+      }
+    });
+
     return sendOk(res, { ok: true, appointment: updated });
   } catch (error) {
     return sendError(res, 500, "Unexpected error");
@@ -435,6 +460,18 @@ export async function cancelNotification(req, res) {
       data: {
         status: "CANCELED",
         canceledAt: new Date()
+      }
+    });
+
+    await writeAuditLog(prisma, null, {
+      action: "APPOINTMENT_STATUS_UPDATED",
+      entityType: "Appointment",
+      entityId: updated.id,
+      summary: "Agendamento cancelado por link público.",
+      metadata: {
+        previousStatus: notification.appointment.status,
+        nextStatus: updated.status,
+        source: "public-cancel-link"
       }
     });
 

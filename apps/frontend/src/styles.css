@@ -614,10 +614,227 @@ select:focus {
 }
 
 .calendar-shell,
+.dashboard-shell,
 .settings-panel,
 .google-panel {
   display: grid;
   gap: 18px;
+}
+
+.dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.metric-card {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 2px solid var(--black);
+  border-radius: 10px;
+  border-top-width: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f8fb 100%);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.05);
+}
+
+.metric-card strong {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.metric-card span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.metric-card--blue {
+  border-top-color: #4285f4;
+  background: linear-gradient(180deg, #ffffff 0%, #eef4ff 100%);
+}
+
+.metric-card--green {
+  border-top-color: #34a853;
+  background: linear-gradient(180deg, #ffffff 0%, #edf8f0 100%);
+}
+
+.metric-card--amber {
+  border-top-color: #fbbc04;
+  background: linear-gradient(180deg, #ffffff 0%, #fff8e2 100%);
+}
+
+.metric-card--red {
+  border-top-color: #ea4335;
+  background: linear-gradient(180deg, #ffffff 0%, #fff0ee 100%);
+}
+
+.metric-card--teal {
+  border-top-color: #0f9d58;
+  background: linear-gradient(180deg, #ffffff 0%, #eaf7f0 100%);
+}
+
+.metric-card--slate {
+  border-top-color: #5f6368;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f3f4 100%);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.dashboard-panel {
+  position: relative;
+  overflow: hidden;
+  border-top-width: 7px;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.04);
+}
+
+.dashboard-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.dashboard-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-panel--blue {
+  border-top-color: #4285f4;
+}
+
+.dashboard-panel--blue::before {
+  background: linear-gradient(160deg, rgba(66, 133, 244, 0.09), transparent 45%);
+}
+
+.dashboard-panel--amber {
+  border-top-color: #fbbc04;
+}
+
+.dashboard-panel--amber::before {
+  background: linear-gradient(160deg, rgba(251, 188, 4, 0.1), transparent 45%);
+}
+
+.dashboard-panel--green {
+  border-top-color: #34a853;
+}
+
+.dashboard-panel--green::before {
+  background: linear-gradient(160deg, rgba(52, 168, 83, 0.09), transparent 45%);
+}
+
+.dashboard-panel--red {
+  border-top-color: #ea4335;
+}
+
+.dashboard-panel--red::before {
+  background: linear-gradient(160deg, rgba(234, 67, 53, 0.08), transparent 45%);
+}
+
+.series-list {
+  display: grid;
+  gap: 10px;
+}
+
+.series-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--white);
+  border: 1px solid #d9d9d9;
+  border-left: 5px solid #4285f4;
+}
+
+.series-row strong {
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.series-row small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.series-row.event-sunday {
+  border-left-color: #6b7280;
+  background: #f3f4f6;
+}
+
+.series-row.event-monday {
+  border-left-color: #2563eb;
+  background: #dbeafe;
+}
+
+.series-row.event-tuesday {
+  border-left-color: #16a34a;
+  background: #dcfce7;
+}
+
+.series-row.event-wednesday {
+  border-left-color: #f97316;
+  background: #ffedd5;
+}
+
+.series-row.event-thursday {
+  border-left-color: #7c3aed;
+  background: #ede9fe;
+}
+
+.series-row.event-friday {
+  border-left-color: #dc2626;
+  background: #fee2e2;
+}
+
+.series-row.event-saturday {
+  border-left-color: #0891b2;
+  background: #cffafe;
+}
+
+.mini-stats {
+  display: grid;
+  gap: 12px;
+}
+
+.mini-stats > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--white);
+  border: 1px solid #d9d9d9;
+  border-left: 5px solid #fbbc04;
+}
+
+.mini-stats strong {
+  font-size: 22px;
+}
+
+.mini-stats > div:nth-child(2) {
+  border-left-color: #4285f4;
+}
+
+.mini-stats > div:nth-child(3) {
+  border-left-color: #34a853;
+}
+
+.pagination-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.pagination-row span {
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .calendar-toolbar,
