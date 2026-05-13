@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "build": "npx prisma generate --schema ../../prisma/schema.prisma",
+    "postinstall": "npx prisma generate --schema ../../prisma/schema.prisma",
     "test": "node --test --experimental-test-isolation=none",
     "cron:run": "node src/scripts/runRemindersNow.js",
     "prisma:migrate": "npx prisma migrate dev --name init --schema ../../prisma/schema.prisma",
