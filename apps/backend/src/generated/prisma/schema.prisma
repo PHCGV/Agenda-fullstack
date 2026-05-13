@@ -1,9 +1,14 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
 datasource db {
   provider = "postgresql"
+}
+
+generator client {
+  provider               = "prisma-client-js"
+  output                 = "../apps/backend/src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "js"
+  importFileExtension    = "js"
 }
 
 enum UserRole {
@@ -194,16 +199,16 @@ model SystemSetting {
 }
 
 model AuditLog {
-  id        String    @id @default(cuid())
-  actor     User?     @relation("AuditActorUser", fields: [actorId], references: [id])
-  actorId   String?
-  actorRole UserRole?
-  action    String
+  id         String    @id @default(cuid())
+  actor      User?     @relation("AuditActorUser", fields: [actorId], references: [id])
+  actorId    String?
+  actorRole  UserRole?
+  action     String
   entityType String
-  entityId  String?
-  summary   String
-  metadata  Json?
-  createdAt DateTime  @default(now())
+  entityId   String?
+  summary    String
+  metadata   Json?
+  createdAt  DateTime  @default(now())
 
   @@index([action, createdAt])
   @@index([actorId, createdAt])

@@ -4,6 +4,11 @@ datasource db {
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../apps/backend/src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "js"
+  importFileExtension    = "js"
 }
 
 enum UserRole {
