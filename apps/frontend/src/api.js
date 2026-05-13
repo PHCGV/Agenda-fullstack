@@ -1,12 +1,27 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim()
+  .replace(/^["']|["']$/g, "")
+  .replace(/\/+$/, "");
+const API_URL =
+  configuredApiUrl || (import.meta.env.PROD ? window.location.origin : "http://localhost:4000");
+
+if (import.meta.env.PROD && !configuredApiUrl) {
+  console.warn(
+    "VITE_API_URL is not configured for this production build. Requests will use the current origin."
+  );
+}
 
 async function request(path, options = {}) {
+  const headers = {
+    ...(options.headers ?? {})
+  };
+
+  if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {})
-    }
+    headers
   });
 
   const contentType = response.headers.get("content-type") ?? "";

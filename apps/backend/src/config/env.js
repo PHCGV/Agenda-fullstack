@@ -48,6 +48,17 @@ function parseCsvNumbers(value, fallback) {
   return numbers.length ? numbers : fallback;
 }
 
+function parseCsvStrings(value, fallback) {
+  if (!value) return fallback;
+
+  const values = value
+    .split(",")
+    .map((item) => item.trim().replace(/^"|"$/g, "").replace(/^'|'$/g, "").replace(/\/+$/, ""))
+    .filter(Boolean);
+
+  return values.length ? values : fallback;
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
   databaseUrl: requireValue("DATABASE_URL"),
@@ -55,6 +66,7 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "1h",
   refreshTokenDays: Number(process.env.REFRESH_TOKEN_DAYS ?? 14),
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
+  frontendOrigins: parseCsvStrings(process.env.FRONTEND_ORIGIN, ["http://localhost:5173"]),
   publicApiUrl: process.env.PUBLIC_API_URL ?? "http://localhost:4000",
   defaultSlotMinutes: Number(process.env.DEFAULT_SLOT_MINUTES ?? 60),
   defaultWorkStart: process.env.DEFAULT_WORK_START ?? "09:00",

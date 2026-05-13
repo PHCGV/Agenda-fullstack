@@ -7,9 +7,22 @@ import cronRoutes from "./routes/cron.js";
 
 const app = express();
 
+function normalizeOrigin(origin) {
+  return typeof origin === "string" ? origin.replace(/\/+$/, "") : origin;
+}
+
 app.use(express.json());
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", config.frontendOrigin);
+  const requestOrigin = normalizeOrigin(req.headers.origin);
+  const allowedOrigins = config.frontendOrigins.map((origin) => normalizeOrigin(origin));
+  const matchedOrigin = requestOrigin
+    ? allowedOrigins.find((origin) => origin === requestOrigin)
+    : null;
+
+  if (matchedOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", matchedOrigin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
