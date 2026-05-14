@@ -52,3 +52,12 @@ Agenda-fullstack/
 ├── Docs/
 ├── package.json
 └── README.md
+
+
+Alunos:
+Pedro Hnerique Cerqueira Gaspari
+Matheus Jatoba
+Rafael Simões Crusoé
+Leonardo Machado Santana
+Victor Negrão Walsh
+
