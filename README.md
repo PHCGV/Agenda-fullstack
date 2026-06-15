@@ -58,6 +58,6 @@ Alunos:
 Pedro Hnerique Cerqueira Gaspari
 Matheus Jatoba
 Rafael Simões Crusoé
-Leonardo Machado Santana
 Victor Negrão Walsh
+Leonardo Machado Santana
 
